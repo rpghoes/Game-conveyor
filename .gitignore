@@ -24,3 +24,31 @@ debug.log
 .idea/
 crashlytics-buildid.txt
 *.slnx
+
+# More Unity generated / local files
+/[Mm]emoryCaptures/
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/[Ss]treamingAssets/aa*
+ExportedObj/
+.consulo/
+*.unityproj
+*.tmp
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+mono_crash.*
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-buildid.txt
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Original SYSTEM-REBOOT materials (kept locally only)
+SYSTEM-REBOOT_Sounds.zip
+SYSTEM-REBOOT_*.docx
