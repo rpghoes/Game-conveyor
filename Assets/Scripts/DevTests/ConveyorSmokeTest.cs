@@ -261,6 +261,9 @@ public class ConveyorSmokeTest : MonoBehaviour
         LevelExit exit = FindFirstObjectByType<LevelExit>();
         Check(!exit.IsOpen, "door: locked before relay 1");
         PowerRelay relay = FindFirstObjectByType<PowerRelay>();
+        FactoryAmbience ambience = FindFirstObjectByType<FactoryAmbience>();
+        Check(ambience != null && ambience.LampCount > 0, "atmosphere: ceiling lamps hang in the hall (" + (ambience != null ? ambience.LampCount : 0) + ")");
+        int litBefore = ambience != null ? ambience.PoweredLamps : 0;
         Teleport((Vector2)relay.transform.position + Vector2.up * 0.1f);
         yield return Wait(0.3f);
         GameInput.SimulatePress(GameInput.Action.Interact);
@@ -268,6 +271,13 @@ public class ConveyorSmokeTest : MonoBehaviour
         Check(RelayManager.ActivatedCount == 1, "relay 1: activated with the interact button");
         Check(UIManager.Instance != null && UIManager.Instance.IsLogOpen, "relay 1: the factory log window opens");
         Check(exit.IsOpen, "door: opens with relay 1");
+        yield return Wait(3.5f);
+        if (ambience != null)
+        {
+            Check(ambience.PoweredLamps > litBefore, "atmosphere: relay 1 brings broken lamps back (" + litBefore + " -> " + ambience.PoweredLamps + " of " + ambience.LampCount + ")");
+            string pa = UIManager.Instance != null ? UIManager.Instance.LastAnnouncement : null;
+            Check(pa != null && pa.Contains("POWER GRID: 1/3"), "atmosphere: the factory PA announces the power grid (" + pa + ")");
+        }
 
         // Module pickup over the pit
         var module = GameObject.Find("Module_ReinforcedPlating");

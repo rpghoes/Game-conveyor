@@ -591,6 +591,7 @@ MonoBehaviour:
   pointB: {fileID: 7117745186653613503}
   patrolSpeed: 2
   turnPause: 0.6
+  minHeadway: 1.2
   detectionRange: 7
   maxHeightDifference: 2.5
   chaseSpeed: 3.8

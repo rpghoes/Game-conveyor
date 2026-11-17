@@ -173,6 +173,8 @@ public static class SoundGenerator
             { "SFX_Pickup", Pickup },
             { "SFX_ShieldUp", ShieldUp },
             { "SFX_ShieldBreak", ShieldBreak },
+            { "SFX_PAChime", PAChime },
+            { "SFX_PowerUp", PowerUp },
         };
         var music = new Dictionary<string, System.Func<float[]>>
         {
@@ -491,6 +493,28 @@ public static class SoundGenerator
         var b = Buffer(0.35f);
         Tone(b, 0f, 0.15f, 200f, 420f, Wave.Saw, 0.2f, decay: 0.8f);
         Tone(b, 0.15f, 0.15f, 980f, 980f, Wave.Square, 0.2f, decay: 1.2f, duty: 0.25f);
+        return b;
+    }
+
+    // Factory PA: a soft two-tone "ding-dong" before an announcement
+    static float[] PAChime()
+    {
+        var b = Buffer(1.4f);
+        Tone(b, 0f, 0.8f, 784f, 784f, Wave.Sine, 0.3f, decay: 2.5f);
+        Tone(b, 0f, 0.8f, 1568f, 1568f, Wave.Sine, 0.06f, decay: 3f);
+        Tone(b, 0.4f, 1f, 622f, 622f, Wave.Sine, 0.3f, decay: 2.2f);
+        Tone(b, 0.4f, 1f, 1244f, 1244f, Wave.Sine, 0.06f, decay: 3f);
+        return b;
+    }
+
+    // Power comes back to a hall: breaker clunk and a rising electric hum
+    static float[] PowerUp()
+    {
+        var b = Buffer(1.3f);
+        Noise(b, 0f, 0.1f, 0.7f, 0.5f, 0.1f, decay: 2f);
+        Tone(b, 0.05f, 1.2f, 50f, 120f, Wave.Saw, 0.3f, attack: 0.3f, decay: 1f);
+        Tone(b, 0.05f, 1.2f, 100f, 240f, Wave.Square, 0.1f, attack: 0.4f, decay: 1f, duty: 0.3f);
+        LowPass(b, 0.4f);
         return b;
     }
 

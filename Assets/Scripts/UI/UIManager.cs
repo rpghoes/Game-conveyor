@@ -433,6 +433,54 @@ public class UIManager : MonoBehaviour
         if (bossBarRoot != null) bossBarRoot.SetActive(false);
     }
 
+    public bool IsBossFight => bossBarRoot != null && bossBarRoot.activeSelf;
+
+    // ---------------- Factory PA announcements ----------------
+
+    private Text announcementText;
+    private Coroutine announcementRoutine;
+
+    // A loudspeaker line in the top right corner, typed out, then fades. Separate from the
+    // message line so it never hides controls hints or pickups.
+    public void ShowAnnouncement(string text, float holdTime = 5f)
+    {
+        if (healthText == null) return;   // main menu has no HUD
+        if (announcementText == null)
+        {
+            RectTransform rect = NewUI("Announcement", transform);
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-40f, -40f);
+            rect.sizeDelta = new Vector2(1100f, 40f);
+            announcementText = NewLabel(rect, 24, TextAnchor.UpperRight);
+        }
+        if (announcementRoutine != null) StopCoroutine(announcementRoutine);
+        announcementRoutine = StartCoroutine(TypeAnnouncement("PA  //  " + text, holdTime));
+    }
+
+    // Last announcement shown (smoke test)
+    public string LastAnnouncement { get; private set; }
+
+    IEnumerator TypeAnnouncement(string text, float holdTime)
+    {
+        LastAnnouncement = text;
+        Color color = new Color(0.95f, 0.8f, 0.5f);
+        announcementText.color = color;
+        announcementText.gameObject.SetActive(true);
+        for (int i = 1; i <= text.Length; i++)
+        {
+            announcementText.text = text.Substring(0, i);
+            yield return new WaitForSeconds(0.025f);
+        }
+        yield return new WaitForSeconds(holdTime);
+        for (float t = 0f; t < 1f; t += Time.deltaTime)
+        {
+            announcementText.color = new Color(color.r, color.g, color.b, 1f - t);
+            yield return null;
+        }
+        announcementText.gameObject.SetActive(false);
+    }
+
     // ---------------- Buttons (Main Menu) ----------------
 
     public void StartGame()

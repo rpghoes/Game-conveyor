@@ -867,6 +867,9 @@ public static class ConveyorBuilder
         // Camera half-height; boss arenas zoom out so the whole hall (and the boss) is in view
         public float cameraSize = 7f;
         public Color background, tint;
+        // Atmosphere: share of broken ceiling lamps before the relays are on, factory PA lines
+        public float damage = 0.5f;
+        public string[] announcements;
         public char[,] cells;
         public List<Thing> things = new List<Thing>();
 
@@ -962,7 +965,13 @@ public static class ConveyorBuilder
             title = "SECTION 01 // FACTORY FLOOR",
             hint = "A/D: MOVE    SPACE: JUMP (AGAIN IN THE AIR)    J: PRESS ARM    E: INTERACT",
             next = "Section_02_Storage", requiredRelays = 1, intro = true,
-            background = new Color(0.07f, 0.06f, 0.05f), tint = new Color(0.85f, 0.8f, 0.72f)
+            background = new Color(0.07f, 0.06f, 0.05f), tint = new Color(0.85f, 0.8f, 0.72f),
+            damage = 0.45f,
+            announcements = new[] {
+                "LINE 3: DEFECTIVE UNITS ARE NOT TO MOVE.",
+                "PRODUCTION QUOTA: EXCEEDED.  CONTINUE PRODUCTION.",
+                "SHIFT 5113 BEGINS.  WORKERS PRESENT: 0.",
+            }
         };
         r.Solid(0, 0, 36, 2).Solid(40, 0, 44, 2)          // floor, pit at x 36..39
          .Belt(5, 1, 16, -1.2f, true)                      // transport line to the furnace
@@ -984,7 +993,13 @@ public static class ConveyorBuilder
             title = "SECTION 02 // STORAGE",
             hint = "A SHADOW ON THE FLOOR MEANS A PRESS IS COMING DOWN.  STAY OUT OF THE SCANNER BEAMS",
             next = "Section_03_Foreman", requiredRelays = 2,
-            background = new Color(0.06f, 0.06f, 0.07f), tint = new Color(0.75f, 0.77f, 0.8f)
+            background = new Color(0.06f, 0.06f, 0.07f), tint = new Color(0.75f, 0.77f, 0.8f),
+            damage = 0.7f,
+            announcements = new[] {
+                "WAREHOUSE CAPACITY: 100%.  STORAGE CONTINUES.",
+                "SECURITY REMINDER: THE SCANNERS SEE EVERYTHING.",
+                "ORDER STATUS: AWAITING CLIENT.",
+            }
         };
         r.Solid(0, 0, 96, 2)
          .Platform(8, 5, 6).Platform(12, 8, 4)             // storage racks at the start
@@ -1012,7 +1027,9 @@ public static class ConveyorBuilder
             hint = "WAIT FOR THE MANIPULATOR TO GET STUCK - THEN STRIKE IT",
             next = "Section_04_Relay",
             background = new Color(0.1f, 0.05f, 0.03f), tint = new Color(1f, 0.8f, 0.65f),
-            arenaMinX = 2, arenaMaxX = 34, activationX = 6, cameraSize = 10f
+            arenaMinX = 2, arenaMaxX = 34, activationX = 6, cameraSize = 10f,
+            damage = 0.3f,
+            announcements = new[] { "THE FOREMAN IS ON DUTY.  PRODUCTIVITY IS SAFETY." }
         };
         r.Solid(0, 0, 44, 2).Belt(2, 1, 19, 2f).Belt(23, 1, 19, -2f)
          .Platform(4, 6, 5).Platform(31, 6, 4)
@@ -1029,7 +1046,12 @@ public static class ConveyorBuilder
         {
             title = "SECTION 04 // POWER DISTRIBUTION",
             next = "Section_05_ControlRoom", requiredRelays = 3,
-            background = new Color(0.05f, 0.07f, 0.06f), tint = new Color(0.8f, 0.88f, 0.8f)
+            background = new Color(0.05f, 0.07f, 0.06f), tint = new Color(0.8f, 0.88f, 0.8f),
+            damage = 0.85f,
+            announcements = new[] {
+                "POWER FAILURE IN SECTOR 4.  REPAIR TEAM: NOT ASSIGNED.",
+                "ALL UNITS: REMAIN AT YOUR STATIONS.",
+            }
         };
         r.Solid(0, 0, 52, 2).Solid(27, 2, 7, 1).Platform(12, 5, 5);
         r.Add('P', 2, 2).Add('C', 6, 2).Relay(30, 3, 3)
@@ -1048,7 +1070,9 @@ public static class ConveyorBuilder
             title = "SECTION 05 // CONTROL ROOM",
             next = "Ending_Surface", requiredRelays = 3,
             background = new Color(0.08f, 0.03f, 0.03f), tint = new Color(0.95f, 0.75f, 0.7f),
-            activationX = 5, cameraSize = 11f
+            activationX = 5, cameraSize = 11f,
+            damage = 0.1f,
+            announcements = new[] { "THE DIRECTOR IS WATCHING.  THE PLAN IS PERFECT." }
         };
         r.Solid(0, 0, 48, 2).Belt(3, 1, 20, 2f).Belt(25, 1, 20, -2f)
          .Platform(6, 7, 5).Platform(37, 7, 5).Platform(20, 11, 8);
@@ -1222,6 +1246,21 @@ public static class ConveyorBuilder
             }
         }
 
+        // ---------- Atmosphere: parallax machinery, lamps, dust, steam, PA ----------
+        var ambience = new GameObject("FactoryAmbience").AddComponent<FactoryAmbience>();
+        ambience.width = room.width;
+        ambience.height = room.height;
+        int seed = 17;
+        foreach (char ch in room.scene) seed = seed * 31 + ch;
+        ambience.seed = seed;
+        ambience.damage = room.damage;
+        ambience.announcements = room.announcements;
+        ambience.lampPoints = LampPoints(room, directorMarker);
+        Transform ambienceAudio = AddAudioRoot(ambience.gameObject);
+        ambience.chimeSound = AddSound(ambienceAudio, "SFX_PAChime");
+        ambience.chimeSound.volume = 0.5f;
+        ambience.powerUpSound = AddSound(ambienceAudio, "SFX_PowerUp");
+
         // ---------- Managers, camera, UI, audio ----------
         var respawnManager = new GameObject("RespawnManager").AddComponent<RespawnManager>();
         respawnManager.playerSpawn = spawn;
@@ -1263,6 +1302,30 @@ public static class ConveyorBuilder
 
         EditorSceneManager.SaveScene(scene, path);
         return path;
+    }
+
+    // Ceiling lamps every 8 tiles: under the ceiling, with at least 3 free tiles below,
+    // not where a press or the Director's monitor hangs
+    static Vector3[] LampPoints(Room room, Thing directorMarker)
+    {
+        var points = new List<Vector3>();
+        for (int x = 4; x < room.width - 3; x += 8)
+        {
+            bool blocked = false;
+            foreach (Thing t in room.things)
+                if (t.kind == 'M' && Mathf.Abs(x - (t.x + t.width * 0.5f)) < 2.5f) blocked = true;
+            if (directorMarker != null && Mathf.Abs(x - directorMarker.x) < 6) blocked = true;
+            if (blocked) continue;
+
+            int y = room.height - 1;
+            while (y - 1 > 0 && room.Cell(x, y - 1) == '#') y--;
+            int floor = y - 1;
+            while (floor >= 0 && room.Cell(x, floor) == '.') floor--;
+            float drop = y - (floor + 1);
+            if (drop < 3f) continue;
+            points.Add(new Vector3(x + 0.5f, y, drop));
+        }
+        return points.ToArray();
     }
 
     static Tilemap NewTilemap(GameObject grid, string name, int sortingOrder, int layer)
