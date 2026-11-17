@@ -139,6 +139,7 @@ public static class ConveyorBuilder
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.Guard), Bottom, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ScanCone), TopCenter, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ServiceDoor), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ForemanClaw), Center, 1);
     }
 
     static void ConfigureSprite(string path, Vector2 pivot, int frameCount)
@@ -320,31 +321,8 @@ public static class ConveyorBuilder
         MakeEnemyAnimations("Guard", PlaceholderSprite(PlaceholderArt.Guard), "Walk");
         MakeEnemyAnimations("ScannerDrone", LoadSprite("Assets/Art/ScannerDrone/ScannerDrone.png"), "Fly");
 
-        // ---------- Boss (placeholder art) ----------
-        Sprite bossSprite = LoadSprite(ArtBoss + "Boss_Placeholder.png");
-        string bossDir = "Assets/Animations/Boss/";
-        AnimatorController bc = NewController(bossDir + "Boss.controller");
-        bc.AddParameter("Attack", AnimatorControllerParameterType.Trigger);
-        bc.AddParameter("Hurt", AnimatorControllerParameterType.Trigger);
-        bc.AddParameter("Dead", AnimatorControllerParameterType.Bool);
-        bc.AddParameter("Vulnerable", AnimatorControllerParameterType.Bool);
-        AnimatorStateMachine bsm = bc.layers[0].stateMachine;
-        AnimatorState bIdle = AddState(bsm, "Idle", MakeClip(bossDir + "Boss_Idle.anim", new[] { bossSprite }, 4f, true), 300, 0);
-        AnimatorState bAttack = AddState(bsm, "Attack", MakeClip(bossDir + "Boss_Attack.anim", new[] { bossSprite }, 4f, false), 550, -120);
-        AnimatorState bVuln = AddState(bsm, "Vulnerable", MakeClip(bossDir + "Boss_Vulnerable.anim", new[] { bossSprite }, 4f, true), 550, 0);
-        AnimatorState bHurt = AddState(bsm, "Hurt", MakeClip(bossDir + "Boss_Hurt.anim", new[] { bossSprite }, 4f, false), 550, 120);
-        AnimatorState bDeath = AddState(bsm, "Death", MakeClip(bossDir + "Boss_Death.anim", new[] { bossSprite }, 4f, false), 150, -120);
-        bsm.defaultState = bIdle;
-        Quick(bIdle.AddTransition(bVuln)).AddCondition(AnimatorConditionMode.If, 0, "Vulnerable");
-        Quick(bVuln.AddTransition(bIdle)).AddCondition(AnimatorConditionMode.IfNot, 0, "Vulnerable");
-        AfterClip(bAttack.AddTransition(bIdle));
-        AfterClip(bHurt.AddTransition(bIdle));
-        AnyState(bsm, bDeath).AddCondition(AnimatorConditionMode.If, 0, "Dead");
-        AnyState(bsm, bHurt).AddCondition(AnimatorConditionMode.If, 0, "Hurt");
-        AnyState(bsm, bAttack).AddCondition(AnimatorConditionMode.If, 0, "Attack");
-
-        // ---------- Core Sentinel (final boss) ----------
-        // SentinelBossController plays the attack states directly (Animator.Play), so they have no
+        // ---------- Sentinel art: used by the Foreman (Idle / Slam / Hurt / Death) ----------
+        // The boss scripts play the attack states directly (Animator.Play), so they have no
         // entry transitions. Hurt only plays from Idle/Walk so hits never cancel an attack.
         string sentinelDir = "Assets/Animations/Sentinel/";
         EnsureFolder(sentinelDir.TrimEnd('/'));
@@ -463,8 +441,7 @@ public static class ConveyorBuilder
     const string RelayPrefabPath = "Assets/Prefabs/Relays/PowerRelay.prefab";
     const string CheckpointPrefabPath = "Assets/Prefabs/Checkpoints/Checkpoint.prefab";
     const string ExitPrefabPath = "Assets/Prefabs/Checkpoints/LevelExit.prefab";
-    const string BossPrefabPath = "Assets/Prefabs/Boss/Boss.prefab";
-    const string ProjectilePrefabPath = "Assets/Prefabs/Boss/BossProjectile.prefab";
+    const string ForemanPrefabPath = "Assets/Prefabs/Boss/Foreman.prefab";
     const string SentinelPrefabPath = "Assets/Prefabs/Boss/Boss_Sentinel.prefab";
     const string HudPrefabPath = "Assets/Prefabs/UI/HUD.prefab";
 
@@ -476,8 +453,7 @@ public static class ConveyorBuilder
         CreateRelayPrefab();
         CreateCheckpointPrefab();
         CreateExitPrefab();
-        CreateProjectilePrefab();
-        CreateBossPrefab();
+        CreateForemanPrefab();
         CreateSentinelPrefab();
         CreateHudPrefab();
     }
@@ -697,47 +673,51 @@ public static class ConveyorBuilder
         SavePrefab(exit, ExitPrefabPath);
     }
 
-    static void CreateProjectilePrefab()
+    // Foreman (mini-boss): the Sentinel art standing on its post, facing left, plus a manipulator
+    // (claw on a cable) that is positioned by ForemanController. Only the manipulator can be hit.
+    static void CreateForemanPrefab()
     {
-        var projectile = new GameObject("BossProjectile") { tag = "Hazard" };
-        var sr = projectile.AddComponent<SpriteRenderer>();
-        sr.sprite = LoadSprite(ArtBoss + "BossProjectile.png");
-        sr.sortingOrder = SortProjectiles;
-        projectile.transform.localScale = Vector3.one * 1.5f;
-        var rb = projectile.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        var col = projectile.AddComponent<CircleCollider2D>();
-        col.isTrigger = true;
-        col.radius = 0.15f;
-        SavePrefab(projectile, ProjectilePrefabPath);
-    }
-
-    static void CreateBossPrefab()
-    {
-        var boss = new GameObject("Boss_CorruptedCore") { tag = "Boss", layer = EnemyLayer };
-        var sr = boss.AddComponent<SpriteRenderer>();
-        sr.sprite = LoadSprite(ArtBoss + "Boss_Placeholder.png");
+        var foreman = new GameObject("Foreman") { tag = "Boss", layer = EnemyLayer };
+        var sr = foreman.AddComponent<SpriteRenderer>();
+        sr.sprite = LoadFrames(ArtSentinel + "Sentinel_Idle.png")[0];
         sr.sortingOrder = SortBoss;
-        var rb = boss.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        var col = boss.AddComponent<CircleCollider2D>();
-        col.radius = 1.4f;
-        boss.AddComponent<Animator>().runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/Boss/Boss.controller");
+        sr.flipX = true; // the art faces right, the Foreman looks at the hall on its left
+        foreman.AddComponent<Animator>().runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/Sentinel/Sentinel.controller");
 
-        Transform audio = AddAudioRoot(boss);
-        var health = boss.AddComponent<EnemyHealth>();
-        health.maxHealth = 24;
+        Transform audio = AddAudioRoot(foreman);
+        var health = foreman.AddComponent<EnemyHealth>();
+        health.maxHealth = 9;          // ~3 hits per opening -> 3-4 cycles
         health.receivesKnockback = false;
         health.destroyOnDeath = false;
-        health.deathFadeTime = 2f;
+        health.keepWreck = true;
+        health.deathFadeTime = 1.6f;
+        health.explosionColor = new Color(1f, 0.6f, 0.25f);
         health.hitSound = AddSound(audio, "SFX_BossHit");
 
-        var controller = boss.AddComponent<BossController>();
-        controller.projectilePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ProjectilePrefabPath);
-        controller.attackSound = AddSound(audio, "SFX_BossAttack");
+        // Manipulator head: the hit target (Enemy layer)
+        var head = new GameObject("Manipulator") { layer = EnemyLayer };
+        head.transform.SetParent(foreman.transform, false);
+        Sprite claw = PlaceholderSprite(PlaceholderArt.ForemanClaw);
+        var headRenderer = head.AddComponent<SpriteRenderer>();
+        headRenderer.sprite = claw;
+        headRenderer.sortingOrder = SortBoss + 1;
+        var headCollider = head.AddComponent<BoxCollider2D>();
+        headCollider.size = claw.bounds.size;
+
+        var controller = foreman.AddComponent<ForemanController>();
+        controller.manipulator = head.transform;
+        controller.manipulatorRenderer = headRenderer;
+        controller.headWidth = claw.bounds.size.x;
+        controller.headHeight = claw.bounds.size.y;
+        controller.groundLayer = 1 << GroundLayer;
+        controller.cable = NewChildSprite(foreman, "Cable", PlaceholderSprite(PlaceholderArt.PressRod), SortBoss);
+        controller.cable.drawMode = SpriteDrawMode.Tiled;
+        controller.cable.size = new Vector2(0.5f, 1f);
+        controller.targetShadow = NewChildSprite(foreman, "TargetShadow", PlaceholderSprite(PlaceholderArt.ShadowBlob), SortHazards);
+        controller.slamSound = AddSound(audio, "SFX_PressImpact");
+        controller.strainSound = AddSound(audio, "SFX_BeltReverse");
         controller.deathSound = AddSound(audio, "SFX_BossDeath");
-        SavePrefab(boss, BossPrefabPath);
+        SavePrefab(foreman, ForemanPrefabPath);
     }
 
     // Final boss: a heavy walker that stays on the floor
@@ -895,6 +875,8 @@ public static class ConveyorBuilder
         public int width, height, requiredRelays;
         // The opening cutscene of the game (Section 01)
         public bool intro;
+        // Boss arenas: where the boss weapon may reach, and where the fight starts
+        public int arenaMinX = 2, arenaMaxX = 34, activationX = 6;
         public Color background, tint;
         public char[,] cells;
         public List<Thing> things = new List<Thing>();
@@ -1018,18 +1000,22 @@ public static class ConveyorBuilder
         rooms.Add(r);
 
         // ---------------- SECTION 03 - FOREMAN (mini-boss arena) ----------------
-        // Two belts make up the floor, four presses hang from the ceiling.
-        // STAGE 1 SKELETON: the Foreman is added in the boss stage; until then the presses cycle on their own.
+        // Two belts make up the floor, four presses hang from the ceiling (the Foreman drops them),
+        // the Foreman stands on its post (balcony, right) and slams its manipulator from the ceiling rail.
+        // The door under the balcony opens when the Foreman is offline.
         r = new Room("Section_03_Foreman", 44, 20)
         {
             title = "SECTION 03 // ASSEMBLY HALL",
+            hint = "WAIT FOR THE MANIPULATOR TO GET STUCK - THEN STRIKE IT",
             next = "Section_04_Relay",
-            background = new Color(0.1f, 0.05f, 0.03f), tint = new Color(1f, 0.8f, 0.65f)
+            background = new Color(0.1f, 0.05f, 0.03f), tint = new Color(1f, 0.8f, 0.65f),
+            arenaMinX = 2, arenaMaxX = 34, activationX = 6
         };
         r.Solid(0, 0, 44, 2).Belt(2, 1, 19, 2f).Belt(23, 1, 19, -2f)
-         .Platform(5, 6, 5).Platform(34, 6, 5);
-        r.Press(11, 3, 4f, 0f).Press(17, 3, 4f, 2f).Press(23, 3, 4f, 1f).Press(29, 3, 4f, 3f);   // never above the platforms
-        r.Add('P', 1, 2).Add('v', 12, 13).Add('v', 31, 13).Add('E', 41, 2);
+         .Platform(4, 6, 5).Platform(31, 6, 4)
+         .Solid(36, 9, 7, 1);                                         // the Foreman's post
+        r.Press(10, 3).Press(16, 3).Press(22, 3).Press(27, 3);       // never above the platforms
+        r.Add('P', 1, 2).Add('X', 39, 10).Add('v', 12, 13).Add('v', 28, 13).Add('E', 41, 2);
         rooms.Add(r);
 
         // ---------------- SECTION 04 - THIRD POWER RELAY ----------------
@@ -1121,6 +1107,8 @@ public static class ConveyorBuilder
         Transform spawn = null;
         GameObject playerObject = null;
         ConveyorBelt introBelt = null;
+        LevelExit roomExit = null;
+        GameObject foremanObject = null;
         float furnaceX = 0f;
         var cargo = new List<Transform>();
 
@@ -1162,6 +1150,10 @@ public static class ConveyorBuilder
                     var levelExit = exit.GetComponent<LevelExit>();
                     levelExit.nextSceneName = room.next;
                     levelExit.requiredRelays = room.requiredRelays;
+                    roomExit = levelExit;
+                    break;
+                case 'X':
+                    foremanObject = Spawn(ForemanPrefabPath, new Vector3(t.x + 0.5f, t.y, 0f), null);
                     break;
                 case 'K':
                     ConveyorBelt belt = NewBelt(t, machinery);
@@ -1183,6 +1175,20 @@ public static class ConveyorBuilder
                 case 'v':
                     NewDecor("Vent", LoadSprite(ArtEnv + "Vent.png"), new Vector3(t.x + 0.5f, t.y + 0.5f, 0f), decor, room.tint);
                     break;
+            }
+        }
+
+        if (foremanObject != null)
+        {
+            var foreman = foremanObject.GetComponent<ForemanController>();
+            foreman.railY = room.height - 1;
+            foreman.minX = room.arenaMinX;
+            foreman.maxX = room.arenaMaxX;
+            foreman.activationX = room.activationX;
+            if (roomExit != null)
+            {
+                roomExit.requiredBoss = foremanObject.GetComponent<EnemyHealth>();
+                roomExit.bossLockedMessage = "ACCESS DENIED - FOREMAN ON DUTY";
             }
         }
 

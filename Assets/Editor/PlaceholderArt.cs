@@ -21,6 +21,7 @@ public static class PlaceholderArt
     public const string Guard = "Guard";                  // 48x64 factory security robot, faces RIGHT, feet at the bottom
     public const string ScanCone = "Scan_Cone";           // 32x64 white cone, apex at the top centre (scanner beam)
     public const string ServiceDoor = "Service_Door";     // 32x64 door in the wall (guard spawn point)
+    public const string ForemanClaw = "Foreman_Claw";     // 64x48 manipulator head of the Foreman (hammer + claws, pointing down)
 
     // Palette: old factory metal, rust, hazard yellow
     static readonly Color Steel = Hex("4a4f57");
@@ -49,6 +50,7 @@ public static class PlaceholderArt
         wrote |= Ensure(Guard, 48, 64, DrawGuard);
         wrote |= Ensure(ScanCone, 32, 64, DrawScanCone);
         wrote |= Ensure(ServiceDoor, 32, 64, DrawServiceDoor);
+        wrote |= Ensure(ForemanClaw, 64, 48, DrawForemanClaw);
         if (wrote) AssetDatabase.Refresh();
         return wrote;
     }
@@ -198,6 +200,25 @@ public static class PlaceholderArt
             for (int y = 0; y < 5; y++)
                 if (((x + y) / 3) % 2 == 0) c.Set(x, y, Hazard);
         c.Rect(12, 59, 8, 4, Hex("15161a"));
+    }
+
+    // Foreman manipulator: a heavy hammer block with two claws, hazard stripes, a socket for the cable on top
+    static void DrawForemanClaw(Canvas c)
+    {
+        Color outline = Hex("15161a");
+        c.Rect(26, 38, 12, 10, outline); c.Rect(28, 38, 8, 10, SteelLight);      // socket
+        c.Rect(6, 16, 52, 24, outline); c.Rect(8, 18, 48, 20, Steel);           // hammer block
+        c.Rect(8, 34, 48, 4, SteelLight);
+        for (int x = 8; x < 56; x++)
+            for (int y = 18; y < 24; y++)
+                if (((x + y) / 4) % 2 == 0) c.Set(x, y, Hazard);
+        c.Circle(14, 30, 2, SteelDark); c.Circle(50, 30, 2, SteelDark);
+        // claws
+        c.Rect(4, 0, 10, 18, outline); c.Rect(6, 2, 6, 16, SteelDark);
+        c.Rect(50, 0, 10, 18, outline); c.Rect(52, 2, 6, 16, SteelDark);
+        c.Rect(6, 0, 4, 3, Rust); c.Rect(54, 0, 4, 3, Rust);
+        // impact plate
+        c.Rect(16, 8, 32, 8, outline); c.Rect(18, 10, 28, 5, Rust);
     }
 
     // Soft ellipse: opaque in the middle, fading to the edge

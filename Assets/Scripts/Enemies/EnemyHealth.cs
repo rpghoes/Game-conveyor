@@ -30,6 +30,9 @@ public class EnemyHealth : MonoBehaviour
     [Tooltip("The sprite is cut into N x N shards")]
     public int shatterPieces = 4;
 
+    [Tooltip("Optional: where hits are shown (sparks, damage numbers) - e.g. the Foreman's manipulator")]
+    public Transform damagePoint;
+
     [Header("Audio")]
     public AudioSource hitSound;
     public AudioSource deathSound;
@@ -60,9 +63,8 @@ public class EnemyHealth : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        isBoss = GetComponent<BossController>() != null || GetComponent<SentinelBossController>() != null;
-        BossController core = GetComponent<BossController>();
-        Rank = !isBoss ? EnemyRank.Normal : (core != null && core.isMiniBoss ? EnemyRank.MiniBoss : EnemyRank.Boss);
+        isBoss = CompareTag("Boss");
+        Rank = !isBoss ? EnemyRank.Normal : (GetComponent<ForemanController>() != null ? EnemyRank.MiniBoss : EnemyRank.Boss);
 
         // Stronger for a stronger Robot
         Scaling = PlayerProgression.TierFor(Rank);
@@ -79,6 +81,7 @@ public class EnemyHealth : MonoBehaviour
     }
 
     Vector2 Center => spriteRenderer != null ? (Vector2)spriteRenderer.bounds.center : (Vector2)transform.position;
+    Vector2 HitPoint => damagePoint != null ? (Vector2)damagePoint.position : Center;
     // Where damage numbers appear
     Vector2 TopOfSprite => spriteRenderer != null
         ? new Vector2(spriteRenderer.bounds.center.x, spriteRenderer.bounds.max.y - (isBoss ? 0.6f : 0f))
@@ -94,7 +97,8 @@ public class EnemyHealth : MonoBehaviour
             if (Time.time >= nextBlockedLabel)
             {
                 nextBlockedLabel = Time.time + 0.3f;
-                DamageNumber.Show(TopOfSprite, "BLOCKED", DamageNumber.BlockedColor, 0.8f, 0.6f);
+                DamageNumber.Show(damagePoint != null ? HitPoint + Vector2.up : TopOfSprite, "BLOCKED", DamageNumber.BlockedColor, 0.8f, 0.6f);
+                Fx.Sparks(HitPoint, new Color(0.8f, 0.8f, 0.85f), 4, 4f);
             }
             return false;
         }
@@ -102,7 +106,7 @@ public class EnemyHealth : MonoBehaviour
         int dealt = Mathf.Min(amount, CurrentHealth);
         CurrentHealth = Mathf.Max(CurrentHealth - amount, 0);
         bool heavy = amount >= PlayerProgression.HitValue * 2.5f;
-        DamageNumber.Show(TopOfSprite, "-" + dealt, heavy ? DamageNumber.HeavyHitColor : DamageNumber.EnemyHitColor, heavy ? 1.4f : 1f);
+        DamageNumber.Show(damagePoint != null ? HitPoint + Vector2.up : TopOfSprite, "-" + dealt, heavy ? DamageNumber.HeavyHitColor : DamageNumber.EnemyHitColor, heavy ? 1.4f : 1f);
         if (!isBoss)
         {
             if (healthBar == null) healthBar = EnemyHealthBar.Create(this);
@@ -111,7 +115,7 @@ public class EnemyHealth : MonoBehaviour
         if (hitSound != null) hitSound.Play();
         if (animator != null) animator.SetTrigger("Hurt");
         StartCoroutine(HitFlash());
-        Fx.Sparks(Center, explosionColor, 7, 6f);
+        Fx.Sparks(HitPoint, explosionColor, 7, 6f);
 
         if (receivesKnockback && rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
         {

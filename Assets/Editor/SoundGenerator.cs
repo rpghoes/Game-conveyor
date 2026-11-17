@@ -43,7 +43,7 @@ public static class SoundGenerator
         "Assets/Prefabs/Player/Player.prefab",
         "Assets/Prefabs/Enemies/Guard.prefab",
         "Assets/Prefabs/Enemies/Scanner.prefab",
-        "Assets/Prefabs/Boss/Boss.prefab",
+        "Assets/Prefabs/Boss/Foreman.prefab",
         "Assets/Prefabs/Boss/Boss_Sentinel.prefab",
         "Assets/Prefabs/Relays/PowerRelay.prefab",
         "Assets/Prefabs/Checkpoints/Checkpoint.prefab",
