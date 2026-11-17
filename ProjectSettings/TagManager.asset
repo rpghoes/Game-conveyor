@@ -10,6 +10,7 @@ TagManager:
   - Hazard
   - Boss
   - DeathZone
+  - Relay
   layers:
   - Default
   - TransparentFX

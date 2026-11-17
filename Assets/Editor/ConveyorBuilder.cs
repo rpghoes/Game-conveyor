@@ -385,6 +385,7 @@ public static class ConveyorBuilder
     // so the clip length is frames / fps)
     static AnimationClip MakeClip(string path, Sprite[] frames, float fps, bool loop)
     {
+        EnsureFolder(Path.GetDirectoryName(path).Replace(Path.DirectorySeparatorChar, '/'));
         var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
         bool isNew = clip == null;
         if (isNew) clip = new AnimationClip();
@@ -406,6 +407,7 @@ public static class ConveyorBuilder
 
     static AnimatorController NewController(string path)
     {
+        EnsureFolder(Path.GetDirectoryName(path).Replace(Path.DirectorySeparatorChar, '/'));
         if (AssetDatabase.LoadAssetAtPath<AnimatorController>(path) != null) AssetDatabase.DeleteAsset(path);
         return AnimatorController.CreateAnimatorControllerAtPath(path);
     }
@@ -988,8 +990,9 @@ public static class ConveyorBuilder
          .Belt(52, 1, 16, -2.5f)                           // belt against the player
          .Platform(70, 5, 5).Platform(76, 8, 5).Solid(82, 11, 13, 1);   // climb to the loft
         r.Press(19, 3, 3f, 0f, 12).Press(25, 3, 3f, 1f, 12).Press(31, 3, 3f, 2f, 12);
-        r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 10).Add('B', 48, 2).Add('D', 60, 12).Add('B', 64, 2).Add('G', 42, 2).Add('G', 80, 2)
-         .Add('C', 71, 2).Relay(90, 12, 2).Add('D', 86, 17)
+        // Scanners fly low enough for their beams (9 units) to reach the floor
+        r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 8).Add('B', 48, 2).Add('D', 60, 9).Add('B', 64, 2).Add('G', 42, 2).Add('G', 80, 2)
+         .Add('C', 71, 2).Relay(90, 12, 2).Add('D', 86, 18)
          .Add('r', 4, 2).Add('r', 39, 2).Add('v', 46, 16).Add('r', 84, 12).Add('E', 93, 2);
         r.Item(13, 9, ItemPickup.Kind.Module, PlayerUpgrades.Module.DashCapacitor)       // on top of the racks
          .Item(38, 2, ItemPickup.Kind.EnergyShield)

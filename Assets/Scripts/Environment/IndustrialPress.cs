@@ -100,6 +100,8 @@ public class IndustrialPress : MonoBehaviour
         yield return new WaitForSeconds(cycleOffset);
         while (true)
         {
+            // Someone else (a boss, an event) may have started a slam: never run two at once
+            while (IsBusy) yield return null;
             yield return SlamRoutine();
             yield return new WaitForSeconds(cycleInterval / speedMultiplier);
         }
@@ -121,7 +123,7 @@ public class IndustrialPress : MonoBehaviour
         return Slam();
     }
 
-    public IEnumerator SlamRoutine()
+    IEnumerator SlamRoutine()
     {
         IsBusy = true;
         IsDown = true;

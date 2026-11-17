@@ -24,7 +24,7 @@ public class ScannerAI : MonoBehaviour
     [Header("Scanning Beam")]
     public SpriteRenderer beam;
     [Tooltip("Beam length in world units")]
-    public float beamRange = 6.5f;
+    public float beamRange = 9f;
     [Tooltip("Half of the cone opening, degrees")]
     public float beamHalfAngle = 16f;
     [Tooltip("How far the beam swings to each side of straight down, degrees")]

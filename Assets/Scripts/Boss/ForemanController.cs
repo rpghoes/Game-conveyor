@@ -342,7 +342,8 @@ public class ForemanController : MonoBehaviour
         if (deathSound != null) deathSound.Play();
         // The hall goes quiet: belts and presses stop
         foreach (ConveyorBelt belt in ConveyorBelt.All.ToArray()) belt.SetSpeed(0f, false);
-        foreach (IndustrialPress press in IndustrialPress.All) press.enabled = false;
+        // ToArray: disabling a press removes it from IndustrialPress.All
+        foreach (IndustrialPress press in IndustrialPress.All.ToArray()) press.enabled = false;
         StartCoroutine(ManipulatorFalls());
         if (UIManager.Instance != null)
         {

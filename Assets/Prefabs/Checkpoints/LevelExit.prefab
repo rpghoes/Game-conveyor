@@ -153,8 +153,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelExit
   nextSceneName: 
-  requiredTerminals: 0
+  requiredRelays: 0
   requiredBoss: {fileID: 0}
+  bossLockedMessage: ACCESS DENIED - SUPERVISOR ON DUTY
   doorRenderer: {fileID: 8289261134487559972}
   lockedColor: {r: 1, g: 0.35, b: 0.35, a: 1}
   openColor: {r: 1, g: 1, b: 1, a: 1}
