@@ -44,7 +44,6 @@ public static class SoundGenerator
         "Assets/Prefabs/Enemies/Guard.prefab",
         "Assets/Prefabs/Enemies/Scanner.prefab",
         "Assets/Prefabs/Boss/Foreman.prefab",
-        "Assets/Prefabs/Boss/Boss_Sentinel.prefab",
         "Assets/Prefabs/Relays/PowerRelay.prefab",
         "Assets/Prefabs/Checkpoints/Checkpoint.prefab",
     };
@@ -531,7 +530,7 @@ public static class SoundGenerator
         return b;
     }
 
-    // Core Sentinel beam: bright buzzing zap that fades out
+    // Bright buzzing zap that fades out (kept from SYSTEM-REBOOT, not used by CONVEYOR yet)
     static float[] BossLaser()
     {
         var b = Buffer(0.7f);

@@ -22,6 +22,14 @@ public static class PlaceholderArt
     public const string ScanCone = "Scan_Cone";           // 32x64 white cone, apex at the top centre (scanner beam)
     public const string ServiceDoor = "Service_Door";     // 32x64 door in the wall (guard spawn point)
     public const string ForemanClaw = "Foreman_Claw";     // 64x48 manipulator head of the Foreman (hammer + claws, pointing down)
+    public const string DirectorCalm = "Director_Calm";   // 160x96 monitor with the Director's face (3 expressions)
+    public const string DirectorAngry = "Director_Angry";
+    public const string DirectorBroken = "Director_Broken";
+    public const string ControlPanel = "Control_Panel";   // 64x48 control desk (final target)
+    public const string PanelShield = "Panel_Shield";     // 64x48 armour bars over the control panel
+    public const string WallUnit = "Wall_Unit";           // 48x96 wall manipulator housing, facing right
+    public const string CrusherWall = "Crusher_Wall";     // 32x32 tile of the moving crusher walls
+    public const string WhitePixel = "White_Pixel";       // 4x4 white (light overlays)
 
     // Palette: old factory metal, rust, hazard yellow
     static readonly Color Steel = Hex("4a4f57");
@@ -51,6 +59,14 @@ public static class PlaceholderArt
         wrote |= Ensure(ScanCone, 32, 64, DrawScanCone);
         wrote |= Ensure(ServiceDoor, 32, 64, DrawServiceDoor);
         wrote |= Ensure(ForemanClaw, 64, 48, DrawForemanClaw);
+        wrote |= Ensure(DirectorCalm, 160, 96, c => DrawDirector(c, 0));
+        wrote |= Ensure(DirectorAngry, 160, 96, c => DrawDirector(c, 1));
+        wrote |= Ensure(DirectorBroken, 160, 96, c => DrawDirector(c, 2));
+        wrote |= Ensure(ControlPanel, 64, 48, DrawControlPanel);
+        wrote |= Ensure(PanelShield, 64, 48, DrawPanelShield);
+        wrote |= Ensure(WallUnit, 48, 96, DrawWallUnit);
+        wrote |= Ensure(CrusherWall, 32, 32, DrawCrusherWall);
+        wrote |= Ensure(WhitePixel, 4, 4, c => c.Rect(0, 0, 4, 4, Color.white));
         if (wrote) AssetDatabase.Refresh();
         return wrote;
     }
@@ -219,6 +235,75 @@ public static class PlaceholderArt
         c.Rect(6, 0, 4, 3, Rust); c.Rect(54, 0, 4, 3, Rust);
         // impact plate
         c.Rect(16, 8, 32, 8, outline); c.Rect(18, 10, 28, 5, Rust);
+    }
+
+    // The Director: a big CRT monitor. mood 0 = calm (cyan), 1 = angry (red), 2 = broken (cracked, static)
+    static void DrawDirector(Canvas c, int mood)
+    {
+        Color frame = Hex("1d1f24");
+        c.Rect(0, 0, 160, 96, frame);
+        c.Rect(4, 4, 152, 88, SteelDark);
+        Color screen = mood == 1 ? Hex("1a0606") : Hex("041214");
+        c.Rect(10, 10, 140, 76, screen);
+        Color face = mood == 0 ? Hex("5ff0ff") : mood == 1 ? Hex("ff4030") : Hex("9aa0a6");
+        var rng = new System.Random(7 + mood);
+        // scanlines
+        for (int y = 10; y < 86; y += 3) c.Rect(10, y, 140, 1, Color.Lerp(screen, Color.black, 0.4f));
+        if (mood == 0)
+        {
+            c.Rect(42, 54, 22, 6, face); c.Rect(96, 54, 22, 6, face);          // flat, attentive eyes
+            c.Rect(56, 28, 48, 4, face);                                      // straight mouth
+        }
+        else if (mood == 1)
+        {
+            for (int i = 0; i < 22; i++) { c.Rect(42 + i, 54 + i / 3, 2, 6, face); c.Rect(118 - i, 54 + i / 3, 2, 6, face); }  // slanted eyes
+            c.Rect(52, 24, 56, 4, face); c.Rect(52, 28, 4, 6, face); c.Rect(104, 28, 4, 6, face);                             // frown
+        }
+        else
+        {
+            for (int i = 0; i < 400; i++) c.Set(10 + rng.Next(140), 10 + rng.Next(76), Color.Lerp(screen, face, (float)rng.NextDouble()));
+            for (int i = 0; i < 14; i++) { c.Rect(44 + i, 50 + i, 3, 3, face); c.Rect(57 - i, 50 + i, 3, 3, face); c.Rect(98 + i, 50 + i, 3, 3, face); c.Rect(111 - i, 50 + i, 3, 3, face); } // X eyes
+            int x = 80, y = 86;
+            while (y > 10) { c.Rect(x, y, 2, 2, Color.white); x += rng.Next(-2, 3); y -= 2; }   // crack
+        }
+        c.Rect(70, 0, 20, 4, Hex("3a3d44"));
+        c.Circle(146, 6, 2, mood == 2 ? Hex("333333") : Hex("ff3a2a"));
+    }
+
+    static void DrawControlPanel(Canvas c)
+    {
+        c.Rect(0, 0, 64, 36, SteelDark);
+        c.Rect(2, 2, 60, 32, Steel);
+        c.Rect(0, 36, 64, 12, Hex("15161a"));
+        c.Rect(4, 38, 56, 8, Hex("103018"));
+        for (int x = 6; x < 58; x += 8) c.Rect(x, 40, 4, 3, Hex("5fff7a"));
+        for (int x = 8; x < 60; x += 12) { c.Circle(x, 24, 3, Hex("ff3a2a")); c.Circle(x, 12, 3, Hazard); }
+    }
+
+    static void DrawPanelShield(Canvas c)
+    {
+        for (int x = 0; x < 64; x += 10) c.Rect(x, 0, 6, 48, SteelLight);
+        c.Rect(0, 20, 64, 6, Steel);
+        for (int x = 0; x < 64; x++) for (int y = 20; y < 26; y++) if (((x + y) / 3) % 2 == 0) c.Set(x, y, Hazard);
+    }
+
+    static void DrawWallUnit(Canvas c)
+    {
+        c.Rect(0, 0, 48, 96, Hex("15161a"));
+        c.Rect(2, 2, 40, 92, Steel);
+        c.Rect(36, 30, 12, 24, SteelDark);   // piston socket on the right side
+        c.Rect(40, 36, 8, 12, SteelLight);
+        for (int y = 8; y < 90; y += 14) c.Rect(6, y, 26, 3, SteelLight);
+        c.Circle(20, 70, 6, Hex("ff3a2a")); c.Circle(20, 70, 3, Hex("ffb0a0"));
+        for (int x = 2; x < 42; x++) for (int y = 0; y < 6; y++) if (((x + y) / 3) % 2 == 0) c.Set(x, y, Hazard);
+    }
+
+    static void DrawCrusherWall(Canvas c)
+    {
+        c.Rect(0, 0, 32, 32, Hex("2f3238"));
+        c.Rect(0, 0, 32, 2, SteelLight);
+        c.Circle(8, 8, 2, SteelLight); c.Circle(24, 24, 2, SteelLight);
+        for (int x = 0; x < 32; x++) for (int y = 12; y < 20; y++) if (((x + y) / 4) % 2 == 0) c.Set(x, y, Hazard);
     }
 
     // Soft ellipse: opaque in the middle, fading to the edge

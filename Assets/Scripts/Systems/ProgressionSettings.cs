@@ -72,7 +72,7 @@ public class ProgressionSettings : ScriptableObject
     [Tooltip("Fully heal the Robot when it levels up")]
     public bool healOnLevelUp = true;
 
-    [Header("Normal Enemies (Virus Bug, Scanner Drone)")]
+    [Header("Normal Enemies (Guard, Scanner)")]
     public Tier[] enemyTiers =
     {
         new Tier(1, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f),
@@ -82,7 +82,7 @@ public class ProgressionSettings : ScriptableObject
         new Tier(9, 2.50f, 2.00f, 1.20f, 1.40f, 1.50f),
     };
 
-    [Header("Mini-Boss (Corrupted Core, Room 5)")]
+    [Header("Mini-Boss (Foreman, Section 03)")]
     public Tier[] miniBossTiers =
     {
         new Tier(1, 1.00f, 1.20f, 1.00f, 1.00f, 1.00f),
@@ -92,7 +92,7 @@ public class ProgressionSettings : ScriptableObject
         new Tier(9, 2.80f, 2.20f, 1.20f, 1.40f, 1.60f),
     };
 
-    [Header("Final Boss (Core Sentinel, Room 10)")]
+    [Header("Final Boss (Director, Section 05)")]
     public Tier[] bossTiers =
     {
         new Tier(1, 1.00f, 1.30f, 1.00f, 1.00f, 1.00f),

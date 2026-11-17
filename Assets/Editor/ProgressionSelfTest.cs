@@ -10,7 +10,7 @@ public static class ProgressionSelfTest
 {
     // Base values from the prefabs (in hits)
     const int RobotHits = 3, RobotAttack = 1;
-    const int BugHits = 3, MiniBossHits = 16, SentinelHits = 40;
+    const int GuardHits = 3, MiniBossHits = 9, BossHits = 5;   // Guard, Foreman, Director control panel
 
     [MenuItem("CONVEYOR/Test Progression")]
     public static void Run()
@@ -39,15 +39,16 @@ public static class ProgressionSelfTest
             int robotHit = PlayerProgression.PlayerDamage(RobotAttack);
             table.AppendFormat("{0,3} | {1,10} | {2,5:0.#} | {3,8} | {4,7} | {5,3:0%} | {6,7:0.0} | {7} | {8} | {9} | {10} / {11} / {12}\n",
                 level, needed, kills, robotHp, robotHit, PlayerProgression.PlayerDefense, PlayerProgression.PlayerRegen,
-                Enemy(EnemyRank.Normal, BugHits, robotHit), Enemy(EnemyRank.MiniBoss, MiniBossHits, robotHit), Enemy(EnemyRank.Boss, SentinelHits, robotHit),
+                Enemy(EnemyRank.Normal, GuardHits, robotHit), Enemy(EnemyRank.MiniBoss, MiniBossHits, robotHit), Enemy(EnemyRank.Boss, BossHits, robotHit),
                 HitsToDie(robotHp, EnemyRank.Normal), HitsToDie(robotHp, EnemyRank.MiniBoss), HitsToDie(robotHp, EnemyRank.Boss));
 
             // Balance guards: a normal enemy never takes more than 5 hits and never kills the Robot in under 3
             ProgressionSettings.Tier t = PlayerProgression.TierFor(EnemyRank.Normal);
-            int bugHp = Mathf.RoundToInt(BugHits * PlayerProgression.HitValue * t.health);
-            failures += Check(Mathf.CeilToInt((float)bugHp / robotHit) <= 5, "level " + level + ": bugs stay killable");
-            failures += Check(HitsToDie(robotHp, EnemyRank.Normal) >= 3, "level " + level + ": bugs don't one-shot the Robot");
-            failures += Check(PlayerProgression.TierFor(EnemyRank.MiniBoss).health * MiniBossHits > t.health * BugHits * 3f, "level " + level + ": mini-boss much tougher");
+            int bugHp = Mathf.RoundToInt(GuardHits * PlayerProgression.HitValue * t.health);
+            failures += Check(Mathf.CeilToInt((float)bugHp / robotHit) <= 5, "level " + level + ": guards stay killable");
+            failures += Check(HitsToDie(robotHp, EnemyRank.Normal) >= 3, "level " + level + ": guards don't one-shot the Robot");
+            // The Foreman has as much HP as three Guards; its real difficulty is that it can only be hit while stuck
+            failures += Check(PlayerProgression.TierFor(EnemyRank.MiniBoss).health * MiniBossHits >= t.health * GuardHits * 3f, "level " + level + ": mini-boss much tougher");
 
             // Gain exactly one level, one kill at a time
             int startLevel = PlayerProgression.Level;

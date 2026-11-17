@@ -104,7 +104,7 @@ public static class ConveyorBuilder
     static readonly Vector2 Bottom = new Vector2(0.5f, 0f);
     static readonly Vector2 SentinelPivot = new Vector2(0.5f, 2f / 112f);   // feet of the Core Sentinel (128x112 frames)
 
-    // Core Sentinel sheets (final boss): name -> frame count. All frames are 128x112, art facing right.
+    // Sentinel sheets (the Foreman's body): name -> frame count. All frames are 128x112, art facing right.
     static readonly (string name, int frames, float fps, bool loop)[] SentinelSheets =
     {
         ("Idle", 8, 8f, true), ("Walk", 6, 8f, true), ("Laser", 5, 8f, false), ("Slash", 8, 14f, false),
@@ -140,6 +140,13 @@ public static class ConveyorBuilder
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ScanCone), TopCenter, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ServiceDoor), Bottom, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ForemanClaw), Center, 1);
+        foreach (string face in new[] { PlaceholderArt.DirectorCalm, PlaceholderArt.DirectorAngry, PlaceholderArt.DirectorBroken })
+            ConfigureSprite(PlaceholderArt.PathOf(face), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ControlPanel), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.PanelShield), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.WallUnit), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.CrusherWall), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.WhitePixel), Center, 1);
     }
 
     static void ConfigureSprite(string path, Vector2 pivot, int frameCount)
@@ -442,7 +449,6 @@ public static class ConveyorBuilder
     const string CheckpointPrefabPath = "Assets/Prefabs/Checkpoints/Checkpoint.prefab";
     const string ExitPrefabPath = "Assets/Prefabs/Checkpoints/LevelExit.prefab";
     const string ForemanPrefabPath = "Assets/Prefabs/Boss/Foreman.prefab";
-    const string SentinelPrefabPath = "Assets/Prefabs/Boss/Boss_Sentinel.prefab";
     const string HudPrefabPath = "Assets/Prefabs/UI/HUD.prefab";
 
     static void CreatePrefabs()
@@ -454,7 +460,6 @@ public static class ConveyorBuilder
         CreateCheckpointPrefab();
         CreateExitPrefab();
         CreateForemanPrefab();
-        CreateSentinelPrefab();
         CreateHudPrefab();
     }
 
@@ -718,39 +723,6 @@ public static class ConveyorBuilder
         controller.strainSound = AddSound(audio, "SFX_BeltReverse");
         controller.deathSound = AddSound(audio, "SFX_BossDeath");
         SavePrefab(foreman, ForemanPrefabPath);
-    }
-
-    // Final boss: a heavy walker that stays on the floor
-    static void CreateSentinelPrefab()
-    {
-        var boss = new GameObject("Boss_Sentinel") { tag = "Boss", layer = EnemyLayer };
-        var sr = boss.AddComponent<SpriteRenderer>();
-        sr.sprite = LoadFrames(ArtSentinel + "Sentinel_Idle.png")[0];
-        sr.sortingOrder = SortBoss;
-        var rb = boss.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        var col = boss.AddComponent<BoxCollider2D>();
-        col.size = new Vector2(2.6f, 2.6f);
-        col.offset = new Vector2(0f, 1.3f);
-        boss.AddComponent<Animator>().runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/Sentinel/Sentinel.controller");
-
-        Transform audio = AddAudioRoot(boss);
-        var health = boss.AddComponent<EnemyHealth>();
-        health.maxHealth = 40;
-        health.receivesKnockback = false;
-        health.destroyOnDeath = false;
-        health.keepWreck = true;
-        health.deathFadeTime = 1.6f;
-        health.explosionColor = new Color(1f, 0.2f, 0.25f);
-        health.hitSound = AddSound(audio, "SFX_BossHit");
-
-        var controller = boss.AddComponent<SentinelBossController>();
-        controller.rocketFrames = LoadFrames(ArtSentinel + "Sentinel_Rocket.png");
-        controller.attackSound = AddSound(audio, "SFX_BossAttack");
-        controller.laserSound = AddSound(audio, "SFX_BossLaser");
-        controller.deathSound = AddSound(audio, "SFX_BossDeath");
-        SavePrefab(boss, SentinelPrefabPath);
     }
 
     // ---------- HUD ----------
@@ -1032,18 +1004,20 @@ public static class ConveyorBuilder
         rooms.Add(r);
 
         // ---------------- SECTION 05 - CONTROL ROOM (final boss arena) ----------------
-        // STAGE 1 SKELETON: the Director is added in the boss stage; until then the presses cycle on their own
-        // and the surface hatch only needs the three relays.
+        // The Director's monitor hangs over the arena ('Y'). Wall manipulators on both walls (phase 1),
+        // service doors for the Guards (phase 2), crusher walls and the control panel (phase 3).
+        // The surface hatch (exit, right) opens when the control panel is destroyed.
         r = new Room("Section_05_ControlRoom", 48, 22)
         {
             title = "SECTION 05 // CONTROL ROOM",
             next = "Ending_Surface", requiredRelays = 3,
-            background = new Color(0.08f, 0.03f, 0.03f), tint = new Color(0.95f, 0.75f, 0.7f)
+            background = new Color(0.08f, 0.03f, 0.03f), tint = new Color(0.95f, 0.75f, 0.7f),
+            activationX = 5
         };
         r.Solid(0, 0, 48, 2).Belt(3, 1, 20, 2f).Belt(25, 1, 20, -2f)
          .Platform(6, 7, 5).Platform(37, 7, 5).Platform(20, 11, 8);
-        r.Press(12, 3, 4.5f, 0f).Press(16, 3, 4.5f, 1.5f).Press(29, 3, 4.5f, 3f).Press(33, 3, 4.5f, 0.75f);   // never above the platforms
-        r.Add('P', 1, 2).Add('E', 46, 2);
+        r.Press(12, 3).Press(16, 3).Press(29, 3).Press(33, 3);       // never above the platforms
+        r.Add('P', 4, 2).Add('Y', 24, 16).Add('E', 46, 2);
         rooms.Add(r);
 
         return rooms;
@@ -1109,6 +1083,7 @@ public static class ConveyorBuilder
         ConveyorBelt introBelt = null;
         LevelExit roomExit = null;
         GameObject foremanObject = null;
+        Thing directorMarker = null;
         float furnaceX = 0f;
         var cargo = new List<Transform>();
 
@@ -1155,6 +1130,9 @@ public static class ConveyorBuilder
                 case 'X':
                     foremanObject = Spawn(ForemanPrefabPath, new Vector3(t.x + 0.5f, t.y, 0f), null);
                     break;
+                case 'Y':
+                    directorMarker = t;
+                    break;
                 case 'K':
                     ConveyorBelt belt = NewBelt(t, machinery);
                     if (t.value2 > 0f) introBelt = belt;
@@ -1189,6 +1167,16 @@ public static class ConveyorBuilder
             {
                 roomExit.requiredBoss = foremanObject.GetComponent<EnemyHealth>();
                 roomExit.bossLockedMessage = "ACCESS DENIED - FOREMAN ON DUTY";
+            }
+        }
+
+        if (directorMarker != null)
+        {
+            DirectorController director = NewDirectorArena(room, directorMarker);
+            if (roomExit != null)
+            {
+                roomExit.requiredBoss = director.controlPanel;
+                roomExit.bossLockedMessage = "SURFACE HATCH: LOCKED BY THE DIRECTOR";
             }
         }
 
@@ -1385,6 +1373,140 @@ public static class ConveyorBuilder
         var col = heat.AddComponent<BoxCollider2D>();
         col.isTrigger = true;
         col.size = new Vector2(t.width / go.transform.localScale.x, 2.5f / go.transform.localScale.y);
+    }
+
+    // The Director's control room: monitor, two wall manipulators, control panel with armour,
+    // guard/scanner spawn points, two crusher walls and a red light overlay for phase 3.
+    static DirectorController NewDirectorArena(Room room, Thing marker)
+    {
+        var root = new GameObject("Director");
+        root.transform.position = new Vector3(marker.x, marker.y, 0f);
+        var director = root.AddComponent<DirectorController>();
+        director.activationX = room.activationX;
+        director.guardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GuardPrefabPath);
+        director.scannerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ScannerPrefabPath);
+
+        // Monitor (8 x 4.8 units)
+        director.faceCalm = PlaceholderSprite(PlaceholderArt.DirectorCalm);
+        director.faceAngry = PlaceholderSprite(PlaceholderArt.DirectorAngry);
+        director.faceBroken = PlaceholderSprite(PlaceholderArt.DirectorBroken);
+        var monitorHolder = new GameObject("Monitor");
+        monitorHolder.transform.SetParent(root.transform, false);
+        monitorHolder.transform.localScale = Vector3.one * (8f / director.faceCalm.bounds.size.x);
+        director.screen = NewChildSprite(monitorHolder, "Screen", director.faceCalm, SortDecor + 4);
+
+        // Wall manipulators: left wall shoots right, right wall shoots left
+        var units = new List<WallManipulator>();
+        foreach (int side in new[] { -1, 1 })
+        {
+            float x = side < 0 ? 1.75f : room.width - 1.75f;
+            var unit = new GameObject(side < 0 ? "WallManipulator_L" : "WallManipulator_R") { tag = "Boss", layer = EnemyLayer };
+            unit.transform.SetParent(root.transform, true);
+            unit.transform.position = new Vector3(x, 2f, 0f);
+            var sr = unit.AddComponent<SpriteRenderer>();
+            sr.sprite = PlaceholderSprite(PlaceholderArt.WallUnit);
+            sr.sortingOrder = SortBoss;
+            sr.flipX = side > 0;
+            var col = unit.AddComponent<BoxCollider2D>();
+            col.size = new Vector2(1.4f, 3f);
+            col.offset = new Vector2(0f, 1.5f);
+            var health = unit.AddComponent<EnemyHealth>();
+            health.maxHealth = 4;
+            health.receivesKnockback = false;
+            health.destroyOnDeath = false;
+            health.explosionColor = new Color(1f, 0.5f, 0.3f);
+            health.explosionSize = 1.6f;
+            Transform audio = AddAudioRoot(unit);
+            health.hitSound = AddSound(audio, "SFX_BossHit");
+            var manipulator = unit.AddComponent<WallManipulator>();
+            manipulator.direction = -side;
+            manipulator.housing = sr;
+            manipulator.pistonY = 2.5f;
+            manipulator.piston = NewChildSprite(unit, "Piston", PlaceholderSprite(PlaceholderArt.PressRod), SortBoss - 1);
+            manipulator.piston.drawMode = SpriteDrawMode.Tiled;
+            manipulator.piston.size = new Vector2(0.1f, 0.5f);
+            manipulator.thrustSound = AddSound(audio, "SFX_BeltReverse");
+            MakeSpatial(manipulator.thrustSound, 0.8f);
+            units.Add(manipulator);
+        }
+        director.wallManipulators = units.ToArray();
+
+        // Control panel (final target) with its armour
+        var panel = new GameObject("ControlPanel") { tag = "Boss", layer = EnemyLayer };
+        panel.transform.SetParent(root.transform, true);
+        panel.transform.position = new Vector3(room.width * 0.5f, 2f, 0f);
+        var panelRenderer = panel.AddComponent<SpriteRenderer>();
+        panelRenderer.sprite = PlaceholderSprite(PlaceholderArt.ControlPanel);
+        panelRenderer.sortingOrder = SortProps;
+        var panelCollider = panel.AddComponent<BoxCollider2D>();
+        panelCollider.size = new Vector2(2f, 1.5f);
+        panelCollider.offset = new Vector2(0f, 0.75f);
+        var panelHealth = panel.AddComponent<EnemyHealth>();
+        panelHealth.maxHealth = 5;
+        panelHealth.receivesKnockback = false;
+        panelHealth.destroyOnDeath = false;
+        panelHealth.keepWreck = true;
+        panelHealth.deathFadeTime = 1.5f;
+        panelHealth.explosionColor = new Color(1f, 0.35f, 0.25f);
+        panelHealth.hitSound = AddSound(AddAudioRoot(panel), "SFX_BossHit");
+        director.controlPanel = panelHealth;
+        director.panelShield = NewChildSprite(panel, "Shield", PlaceholderSprite(PlaceholderArt.PanelShield), SortProps + 1);
+
+        // Spawn points (doors are decoration here: the Director sends the Guards itself)
+        var guardSpawns = new List<Transform>();
+        foreach (float x in new[] { 10.5f, room.width - 10.5f })
+        {
+            var door = new GameObject("SecurityDoor");
+            door.transform.SetParent(root.transform, true);
+            door.transform.position = new Vector3(x, 2f, 0f);
+            NewChildSprite(door, "Door", PlaceholderSprite(PlaceholderArt.ServiceDoor), SortDecor + 2);
+            guardSpawns.Add(door.transform);
+        }
+        director.guardSpawns = guardSpawns.ToArray();
+        var scannerSpawns = new List<Transform>();
+        foreach (float x in new[] { 8f, room.width - 8f })
+        {
+            var spawn = new GameObject("ScannerSpawn").transform;
+            spawn.SetParent(root.transform, true);
+            spawn.position = new Vector3(x, room.height - 4f, 0f);
+            scannerSpawns.Add(spawn);
+        }
+        director.scannerSpawns = scannerSpawns.ToArray();
+
+        // Crusher walls: start inside the outer walls, move in by crusherTravel in phase 3
+        float wallHeight = room.height - 3f;
+        foreach (int side in new[] { -1, 1 })
+        {
+            var crusher = new GameObject(side < 0 ? "Crusher_L" : "Crusher_R") { layer = GroundLayer };
+            crusher.transform.SetParent(root.transform, true);
+            crusher.transform.position = new Vector3(side < 0 ? -0.5f : room.width + 0.5f, 2f + wallHeight * 0.5f, 0f);
+            var body = crusher.AddComponent<Rigidbody2D>();
+            body.bodyType = RigidbodyType2D.Kinematic;
+            body.interpolation = RigidbodyInterpolation2D.Interpolate;
+            var col = crusher.AddComponent<BoxCollider2D>();
+            col.size = new Vector2(3f, wallHeight);
+            var sr = crusher.AddComponent<SpriteRenderer>();
+            sr.sprite = PlaceholderSprite(PlaceholderArt.CrusherWall);
+            sr.drawMode = SpriteDrawMode.Tiled;
+            sr.size = new Vector2(3f, wallHeight);
+            sr.sortingOrder = SortTiles + 1;
+            if (side < 0) director.leftCrusher = crusher.transform;
+            else director.rightCrusher = crusher.transform;
+        }
+        director.crusherTravel = 10f;
+
+        // Red light (phase 3): a transparent overlay over the whole room
+        director.redLight = NewChildSprite(root, "RedLight", PlaceholderSprite(PlaceholderArt.WhitePixel), 25);
+        Vector2 pixel = director.redLight.sprite.bounds.size;
+        director.redLight.transform.position = new Vector3(room.width * 0.5f, room.height * 0.5f, 0f);
+        director.redLight.transform.localScale = new Vector3(room.width / pixel.x, room.height / pixel.y, 1f);
+        director.redLight.color = new Color(1f, 0.1f, 0.05f, 0.18f);
+
+        Transform rootAudio = AddAudioRoot(root);
+        director.voiceSound = AddSound(rootAudio, "SFX_ScanBeep");
+        director.alarmSound = AddSound(rootAudio, "SFX_Alarm");
+        director.deathSound = AddSound(rootAudio, "SFX_BossDeath");
+        return director;
     }
 
     // Service door in the back wall: a Guard comes out of it when an alarm is raised nearby
