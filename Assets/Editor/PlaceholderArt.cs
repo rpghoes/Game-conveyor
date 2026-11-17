@@ -30,6 +30,12 @@ public static class PlaceholderArt
     public const string WallUnit = "Wall_Unit";           // 48x96 wall manipulator housing, facing right
     public const string CrusherWall = "Crusher_Wall";     // 32x32 tile of the moving crusher walls
     public const string WhitePixel = "White_Pixel";       // 4x4 white (light overlays)
+    public const string ItemRepair = "Item_RepairKit";    // 24x24 item icons
+    public const string ItemShield = "Item_Shield";
+    public const string ItemOverdrive = "Item_Overdrive";
+    public const string ItemModule = "Item_Module";
+    public const string GlowSoft = "Glow_Soft";           // 32x32 soft white glow (item halo)
+    public const string ShieldBubble = "Shield_Bubble";   // 64x64 ring (energy shield around the Robot)
 
     // Palette: old factory metal, rust, hazard yellow
     static readonly Color Steel = Hex("4a4f57");
@@ -67,6 +73,12 @@ public static class PlaceholderArt
         wrote |= Ensure(WallUnit, 48, 96, DrawWallUnit);
         wrote |= Ensure(CrusherWall, 32, 32, DrawCrusherWall);
         wrote |= Ensure(WhitePixel, 4, 4, c => c.Rect(0, 0, 4, 4, Color.white));
+        wrote |= Ensure(ItemRepair, 24, 24, DrawItemRepair);
+        wrote |= Ensure(ItemShield, 24, 24, DrawItemShield);
+        wrote |= Ensure(ItemOverdrive, 24, 24, DrawItemOverdrive);
+        wrote |= Ensure(ItemModule, 24, 24, DrawItemModule);
+        wrote |= Ensure(GlowSoft, 32, 32, c => Radial(c, 16f, d => Mathf.Clamp01(1f - d) * Mathf.Clamp01(1f - d)));
+        wrote |= Ensure(ShieldBubble, 64, 64, c => Radial(c, 32f, d => d > 1f ? 0f : Mathf.Clamp01(1f - Mathf.Abs(d - 0.88f) * 9f) + 0.15f * d));
         if (wrote) AssetDatabase.Refresh();
         return wrote;
     }
@@ -304,6 +316,54 @@ public static class PlaceholderArt
         c.Rect(0, 0, 32, 2, SteelLight);
         c.Circle(8, 8, 2, SteelLight); c.Circle(24, 24, 2, SteelLight);
         for (int x = 0; x < 32; x++) for (int y = 12; y < 20; y++) if (((x + y) / 4) % 2 == 0) c.Set(x, y, Hazard);
+    }
+
+    // White pixels whose alpha depends on the distance from the centre (0 centre, 1 edge)
+    static void Radial(Canvas c, float radius, System.Func<float, float> alpha)
+    {
+        int size = Mathf.RoundToInt(radius * 2f);
+        for (int x = 0; x < size; x++)
+            for (int y = 0; y < size; y++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(radius, radius)) / radius;
+                c.Set(x, y, new Color(1f, 1f, 1f, alpha(d)));
+            }
+    }
+
+    // Repair kit: green case with a white cross
+    static void DrawItemRepair(Canvas c)
+    {
+        c.Rect(2, 3, 20, 16, Hex("15161a")); c.Rect(3, 4, 18, 14, Hex("3fbf5a"));
+        c.Rect(9, 19, 6, 3, Hex("15161a"));
+        c.Rect(10, 6, 4, 10, Color.white); c.Rect(7, 9, 10, 4, Color.white);
+    }
+
+    // Energy shield cell: cyan hexagon battery
+    static void DrawItemShield(Canvas c)
+    {
+        for (int y = 2; y < 22; y++)
+        {
+            int half = 9 - Mathf.Max(0, Mathf.Abs(y - 12) - 4);
+            c.Rect(12 - half, y, half * 2, 1, Hex("15161a"));
+            if (half > 1) c.Rect(13 - half, y, half * 2 - 2, 1, Hex("3fd8f0"));
+        }
+        c.Rect(10, 8, 4, 8, Color.white);
+    }
+
+    // Press overdrive: orange cartridge with a lightning bolt
+    static void DrawItemOverdrive(Canvas c)
+    {
+        c.Rect(5, 1, 14, 22, Hex("15161a")); c.Rect(6, 2, 12, 20, Hex("e07a20"));
+        int[] bolt = { 13, 12, 11, 10, 9, 12, 11, 10, 9, 8 };
+        for (int i = 0; i < bolt.Length; i++) c.Rect(bolt[i], 19 - i * 1 - (i > 4 ? 2 : 0), 3, 2, Color.white);
+    }
+
+    // Module: a circuit chip with gold pins
+    static void DrawItemModule(Canvas c)
+    {
+        c.Rect(4, 4, 16, 16, Hex("15161a")); c.Rect(5, 5, 14, 14, Hex("2b3a2e"));
+        for (int i = 6; i < 19; i += 3) { c.Rect(i, 1, 1, 3, Hazard); c.Rect(i, 20, 1, 3, Hazard); c.Rect(1, i, 3, 1, Hazard); c.Rect(20, i, 3, 1, Hazard); }
+        c.Rect(9, 9, 6, 6, Hazard); c.Rect(10, 10, 4, 4, Hex("fff0a0"));
     }
 
     // Soft ellipse: opaque in the middle, fading to the edge

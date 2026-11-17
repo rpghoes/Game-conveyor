@@ -4,17 +4,17 @@ using UnityEngine.InputSystem;
 // One place that answers "what is the player pressing" for keyboard and gamepad.
 // Gameplay scripts read GameInput instead of Keyboard.current, so controls can be changed here
 // and automated tests can press buttons with GameInput.Simulate*.
-//   Keyboard: A/D or arrows move, Space jump, J attack, E interact
-//   Gamepad:  left stick / d-pad move, South (A) jump, West (X) attack, North (Y) interact
+//   Keyboard: A/D or arrows move, Space jump, J attack, K or Left Shift dash, E interact
+//   Gamepad:  left stick / d-pad move, South (A) jump, West (X) attack, Right shoulder / East (B) dash, North (Y) interact
 public static class GameInput
 {
-    public enum Action { Jump, Attack, Interact }
+    public enum Action { Jump, Attack, Interact, Dash }
 
     // ---------------- Simulation (tests) ----------------
     // While a simulated axis is set it replaces the real horizontal input.
     private static float? simulatedHorizontal;
     private static bool simulatedJumpHeld;
-    private static readonly int[] simulatedPressFrame = { -1, -1, -1 };
+    private static readonly int[] simulatedPressFrame = { -1, -1, -1, -1 };
 
     // Press an action on the next frame (as if the button went down once)
     public static void SimulatePress(Action action)
@@ -74,6 +74,7 @@ public static class GameInput
     public static bool JumpPressed => Pressed(Action.Jump);
     public static bool AttackPressed => Pressed(Action.Attack);
     public static bool InteractPressed => Pressed(Action.Interact);
+    public static bool DashPressed => Pressed(Action.Dash);
 
     static bool Pressed(Action action)
     {
@@ -88,6 +89,9 @@ public static class GameInput
                 return (k != null && k.jKey.wasPressedThisFrame) || (g != null && g.buttonWest.wasPressedThisFrame);
             case Action.Interact:
                 return (k != null && k.eKey.wasPressedThisFrame) || (g != null && g.buttonNorth.wasPressedThisFrame);
+            case Action.Dash:
+                return (k != null && (k.kKey.wasPressedThisFrame || k.leftShiftKey.wasPressedThisFrame)) ||
+                       (g != null && (g.rightShoulder.wasPressedThisFrame || g.buttonEast.wasPressedThisFrame));
         }
         return false;
     }

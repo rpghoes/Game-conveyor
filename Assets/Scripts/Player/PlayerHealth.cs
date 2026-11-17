@@ -38,6 +38,7 @@ public class PlayerHealth : MonoBehaviour
     [HideInInspector] public bool invulnerable;
 
     private PlayerController controller;
+    private PlayerBuffs buffs;
     private Rigidbody2D rb;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
@@ -51,11 +52,37 @@ public class PlayerHealth : MonoBehaviour
     void Awake()
     {
         controller = GetComponent<PlayerController>();
+        buffs = GetComponent<PlayerBuffs>();
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        MaxHealth = PlayerProgression.PlayerMaxHealth(maxHealth);
+        MaxHealth = ComputeMaxHealth();
         CurrentHealth = MaxHealth;
+    }
+
+    // Base health (+ level bonus) + Reinforced Plating modules
+    int ComputeMaxHealth()
+    {
+        return PlayerProgression.PlayerMaxHealth(maxHealth) + PlayerUpgrades.ExtraHealthCells * PlayerProgression.HitValue;
+    }
+
+    // A module changed the maximum: the new cell comes filled
+    public void RefreshMaxHealth()
+    {
+        int oldMax = MaxHealth;
+        MaxHealth = ComputeMaxHealth();
+        if (!IsDead) CurrentHealth = Mathf.Clamp(CurrentHealth + (MaxHealth - oldMax), 0, MaxHealth);
+        RefreshUI();
+    }
+
+    // Repair kits
+    public void Heal(int amount)
+    {
+        if (IsDead || amount <= 0) return;
+        CurrentHealth = Mathf.Min(CurrentHealth + amount, MaxHealth);
+        RefreshUI();
+        Fx.Sparks(Chest, DamageNumber.HealColor, 10, 4f);
+        DamageNumber.Show(Chest + Vector2.up * 1.1f, "+" + amount, DamageNumber.HealColor, 1.1f);
     }
 
     void OnEnable() { PlayerProgression.LeveledUp += OnLevelUp; }
@@ -87,7 +114,7 @@ public class PlayerHealth : MonoBehaviour
     void OnLevelUp(int level)
     {
         int oldMax = MaxHealth;
-        MaxHealth = PlayerProgression.PlayerMaxHealth(maxHealth);
+        MaxHealth = ComputeMaxHealth();
         if (!IsDead)
         {
             CurrentHealth = PlayerProgression.Settings.healOnLevelUp ? MaxHealth : Mathf.Min(CurrentHealth + MaxHealth - oldMax, MaxHealth);
@@ -111,6 +138,13 @@ public class PlayerHealth : MonoBehaviour
     public void TakeDamage(int amount, Vector2 sourcePosition, float multiplier)
     {
         if (IsDead || invulnerable || Time.time < invincibleUntil) return;
+
+        // An energy shield takes the hit instead (short invincibility so one attack only breaks one charge)
+        if (buffs != null && buffs.TryAbsorbHit())
+        {
+            invincibleUntil = Time.time + 0.5f;
+            return;
+        }
 
         // Hits -> HP, then the Robot's defense takes its share
         float raw = amount * PlayerProgression.HitValue * multiplier * (1f - PlayerProgression.PlayerDefense);
@@ -140,6 +174,7 @@ public class PlayerHealth : MonoBehaviour
     void Die()
     {
         IsDead = true;
+        if (buffs != null) buffs.ClearAll();
         controller.canControl = false;
         controller.StopMovement();
         if (animator != null) animator.SetBool("Dead", true);

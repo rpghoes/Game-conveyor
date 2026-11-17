@@ -147,6 +147,9 @@ public static class ConveyorBuilder
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.WallUnit), Bottom, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.CrusherWall), Center, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.WhitePixel), Center, 1);
+        foreach (string item in new[] { PlaceholderArt.ItemRepair, PlaceholderArt.ItemShield, PlaceholderArt.ItemOverdrive, PlaceholderArt.ItemModule,
+                                        PlaceholderArt.GlowSoft, PlaceholderArt.ShieldBubble })
+            ConfigureSprite(PlaceholderArt.PathOf(item), Center, 1);
     }
 
     static void ConfigureSprite(string path, Vector2 pivot, int frameCount)
@@ -541,9 +544,19 @@ public static class ConveyorBuilder
         combat.enemyLayer = 1 << EnemyLayer;
         combat.attackSound = AddSound(audio, "SFX_Attack");
 
+        controller.dashSound = AddSound(audio, "SFX_Dash");
+
         var health = player.AddComponent<PlayerHealth>();
         health.hurtSound = AddSound(audio, "SFX_Hurt");
         health.deathSound = AddSound(audio, "SFX_Death");
+
+        var buffs = player.AddComponent<PlayerBuffs>();
+        buffs.shieldBubble = NewChildSprite(player, "ShieldBubble", PlaceholderSprite(PlaceholderArt.ShieldBubble), SortPlayer + 1);
+        buffs.shieldBubble.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+        buffs.shieldBubble.transform.localScale = Vector3.one * (2.1f / buffs.shieldBubble.sprite.bounds.size.x);
+        buffs.shieldBubble.enabled = false;
+        buffs.shieldSound = AddSound(audio, "SFX_ShieldUp");
+        buffs.shieldBreakSound = AddSound(audio, "SFX_ShieldBreak");
 
         SavePrefab(player, PlayerPrefabPath);
     }
@@ -895,6 +908,12 @@ public static class ConveyorBuilder
         }
 
         public Room Relay(int x, int y, int number) { things.Add(new Thing { kind = 'R', x = x, y = y, index = number }); return this; }
+        // A pickup floating at cell (x, y)
+        public Room Item(int x, int y, ItemPickup.Kind kind, PlayerUpgrades.Module module = PlayerUpgrades.Module.ReinforcedPlating)
+        {
+            things.Add(new Thing { kind = 'I', x = x, y = y, index = (int)kind, value = (float)(int)module });
+            return this;
+        }
         public Room Furnace(int x, int y, int w) { things.Add(new Thing { kind = 'F', x = x, y = y, width = w }); return this; }
         // A defective unit lying on the intro belt
         public Room Cargo(int x, int y) { return Add('U', x, y); }
@@ -948,6 +967,9 @@ public static class ConveyorBuilder
         r.Furnace(1, 2, 4).Cargo(7, 2).Cargo(11, 2)
          .Add('P', 17, 2).Add('B', 30, 2).Add('C', 41, 2).Add('B', 50, 2).Relay(62, 5, 1).Add('B', 72, 2)
          .Add('r', 24, 2).Add('v', 27, 9).Add('r', 68, 2).Add('v', 55, 10).Add('r', 76, 2).Add('E', 81, 2);
+        r.Platform(37, 8, 2)                                                    // a girder over the pit
+         .Item(37, 9, ItemPickup.Kind.Module, PlayerUpgrades.Module.ReinforcedPlating)
+         .Item(67, 2, ItemPickup.Kind.RepairKit);
         rooms.Add(r);
 
         // ---------------- SECTION 02 - STORAGE ----------------
@@ -969,6 +991,10 @@ public static class ConveyorBuilder
         r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 10).Add('B', 48, 2).Add('D', 60, 12).Add('B', 64, 2).Add('G', 42, 2).Add('G', 80, 2)
          .Add('C', 71, 2).Relay(90, 12, 2).Add('D', 86, 17)
          .Add('r', 4, 2).Add('r', 39, 2).Add('v', 46, 16).Add('r', 84, 12).Add('E', 93, 2);
+        r.Item(13, 9, ItemPickup.Kind.Module, PlayerUpgrades.Module.DashCapacitor)       // on top of the racks
+         .Item(38, 2, ItemPickup.Kind.EnergyShield)
+         .Item(87, 12, ItemPickup.Kind.RepairKit)
+         .Item(93, 12, ItemPickup.Kind.Module, PlayerUpgrades.Module.ShieldEmitter);   // end of the loft
         rooms.Add(r);
 
         // ---------------- SECTION 03 - FOREMAN (mini-boss arena) ----------------
@@ -988,6 +1014,8 @@ public static class ConveyorBuilder
          .Solid(36, 9, 7, 1);                                         // the Foreman's post
         r.Press(10, 3).Press(16, 3).Press(22, 3).Press(27, 3);       // never above the platforms
         r.Add('P', 1, 2).Add('X', 39, 10).Add('v', 12, 13).Add('v', 28, 13).Add('E', 41, 2);
+        r.Item(2, 2, ItemPickup.Kind.EnergyShield)
+         .Item(38, 2, ItemPickup.Kind.Module, PlayerUpgrades.Module.ActuatorOverclock);  // under the Foreman's post
         rooms.Add(r);
 
         // ---------------- SECTION 04 - THIRD POWER RELAY ----------------
@@ -1001,6 +1029,9 @@ public static class ConveyorBuilder
         r.Solid(0, 0, 52, 2).Solid(27, 2, 7, 1).Platform(12, 5, 5);
         r.Add('P', 2, 2).Add('C', 6, 2).Relay(30, 3, 3)
          .Add('r', 20, 2).Add('r', 23, 2).Add('r', 37, 2).Add('r', 40, 2).Add('v', 15, 11).Add('v', 44, 10).Add('E', 49, 2);
+        r.Item(14, 6, ItemPickup.Kind.Module, PlayerUpgrades.Module.ServoOverdrive)      // maintenance shelf
+         .Item(8, 2, ItemPickup.Kind.RepairKit)
+         .Item(45, 2, ItemPickup.Kind.EnergyShield);
         rooms.Add(r);
 
         // ---------------- SECTION 05 - CONTROL ROOM (final boss arena) ----------------
@@ -1018,6 +1049,9 @@ public static class ConveyorBuilder
          .Platform(6, 7, 5).Platform(37, 7, 5).Platform(20, 11, 8);
         r.Press(12, 3).Press(16, 3).Press(29, 3).Press(33, 3);       // never above the platforms
         r.Add('P', 4, 2).Add('Y', 24, 16).Add('E', 46, 2);
+        r.Item(8, 8, ItemPickup.Kind.RepairKit)
+         .Item(39, 8, ItemPickup.Kind.RepairKit)
+         .Item(24, 12, ItemPickup.Kind.PressOverdrive);
         rooms.Add(r);
 
         return rooms;
@@ -1146,6 +1180,9 @@ public static class ConveyorBuilder
                     break;
                 case 'U':
                     cargo.Add(NewCargoUnit(feet, decor));
+                    break;
+                case 'I':
+                    NewItem(t, interactables);
                     break;
                 case 'r':
                     NewDecor("Cabinet", LoadSprite(ArtEnv + "ServerRack.png"), feet, decor, room.tint);
@@ -1522,6 +1559,32 @@ public static class ConveyorBuilder
         spawnPoint.lamp.transform.localPosition = new Vector3(0f, 1.9f, 0f);
         spawnPoint.openSound = AddSound(AddAudioRoot(go), "SFX_BeltReverse");
         MakeSpatial(spawnPoint.openSound, 0.7f);
+    }
+
+    // Floating pickup: icon + soft halo in the item colour
+    static void NewItem(Thing t, Transform parent)
+    {
+        var kind = (ItemPickup.Kind)t.index;
+        var module = (PlayerUpgrades.Module)Mathf.RoundToInt(t.value);
+        var go = new GameObject(kind == ItemPickup.Kind.Module ? "Module_" + module : "Item_" + kind);
+        go.transform.SetParent(parent, false);
+        go.transform.position = new Vector3(t.x + 0.5f, t.y + 0.6f, 0f);
+        var col = go.AddComponent<CircleCollider2D>();
+        col.isTrigger = true;
+        col.radius = 0.55f;
+
+        string icon = kind == ItemPickup.Kind.RepairKit ? PlaceholderArt.ItemRepair
+                    : kind == ItemPickup.Kind.EnergyShield ? PlaceholderArt.ItemShield
+                    : kind == ItemPickup.Kind.PressOverdrive ? PlaceholderArt.ItemOverdrive
+                    : PlaceholderArt.ItemModule;
+        var pickup = go.AddComponent<ItemPickup>();
+        pickup.kind = kind;
+        pickup.module = module;
+        pickup.glow = NewChildSprite(go, "Glow", PlaceholderSprite(PlaceholderArt.GlowSoft), SortProps + 3);
+        pickup.glow.transform.localScale = Vector3.one * (1.6f / pickup.glow.sprite.bounds.size.x);
+        pickup.itemRenderer = NewChildSprite(go, "Icon", PlaceholderSprite(icon), SortProps + 4);
+        pickup.itemRenderer.transform.localScale = Vector3.one * 1.3f;
+        pickup.pickupSound = AddSound(AddAudioRoot(go), "SFX_Pickup");
     }
 
     // A dark, switched-off robot lying on the transport line (same model as Unit 0412)

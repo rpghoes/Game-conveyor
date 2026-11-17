@@ -34,6 +34,7 @@ public class PlayerCombat : MonoBehaviour
     public bool IsAttacking { get; private set; }
 
     private PlayerController controller;
+    private PlayerBuffs buffs;
     private Animator animator;
     private float nextAttackTime;
     private readonly List<EnemyHealth> hitThisAttack = new List<EnemyHealth>();
@@ -41,6 +42,7 @@ public class PlayerCombat : MonoBehaviour
     void Awake()
     {
         controller = GetComponent<PlayerController>();
+        buffs = GetComponent<PlayerBuffs>();
         animator = GetComponent<Animator>();
         if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
     }
@@ -94,7 +96,14 @@ public class PlayerCombat : MonoBehaviour
 
             hitThisAttack.Add(enemy); // each enemy can only be hit once per swing
             Vector2 knockback = new Vector2(controller.FacingDirection * knockbackForce, knockbackUpForce);
-            enemy.TakeDamage(PlayerProgression.PlayerDamage(damage), knockback);
+            float multiplier = PlayerUpgrades.DamageMultiplier * (buffs != null ? buffs.DamageMultiplier : 1f);
+            int dealt = Mathf.Max(1, Mathf.RoundToInt(PlayerProgression.PlayerDamage(damage) * multiplier));
+            if (enemy.TakeDamage(dealt, knockback))
+            {
+                // The press arm lands: a tiny freeze and shake sell the weight of the hit
+                CameraFollow.Shake(0.08f, 0.1f);
+                HitStop.Freeze(0.045f);
+            }
         }
     }
 

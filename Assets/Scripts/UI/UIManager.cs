@@ -51,6 +51,11 @@ public class UIManager : MonoBehaviour
     private RectTransform logPanel;
     private Text logTitleLabel;
     private Text logBody;
+    // Status line (dash / shield / overdrive / modules)
+    private Text statusText;
+    private Text modulesText;
+    private PlayerController statusPlayer;
+    private PlayerBuffs statusBuffs;
 
     // True while the factory log window is printing or on screen
     public bool IsLogOpen => logPanel != null && logPanel.gameObject.activeSelf;
@@ -75,6 +80,7 @@ public class UIManager : MonoBehaviour
     void Update()
     {
         RefreshHealthCells();
+        RefreshStatusLine();
     }
 
     // ---------------- HUD ----------------
@@ -231,6 +237,74 @@ public class UIManager : MonoBehaviour
         flashImage.gameObject.SetActive(false);
     }
 
+    // ---------------- Status line: dash, shield, overdrive, modules ----------------
+
+    // Item picked up: the message in the item's colour and a soft flash
+    public void ShowPickup(string text, Color color)
+    {
+        ShowMessage(text, 3f);
+        if (messageText != null) StartCoroutine(TintMessage(color, 3f));
+        Flash(new Color(color.r, color.g, color.b, 0.15f), 0.3f);
+    }
+
+    IEnumerator TintMessage(Color color, float duration)
+    {
+        messageText.color = color;
+        yield return new WaitForSeconds(duration);
+        messageText.color = Color.white;
+    }
+
+    void BuildStatusLine()
+    {
+        RectTransform rect = NewUI("StatusLine", transform);
+        rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(40f, -150f);
+        rect.sizeDelta = new Vector2(1200f, 40f);
+        statusText = NewLabel(rect, 28, TextAnchor.UpperLeft);
+        statusText.supportRichText = true;
+        statusText.color = new Color(0.85f, 0.82f, 0.75f);
+
+        RectTransform modulesRect = NewUI("ModulesLine", transform);
+        modulesRect.anchorMin = modulesRect.anchorMax = new Vector2(0f, 1f);
+        modulesRect.pivot = new Vector2(0f, 1f);
+        modulesRect.anchoredPosition = new Vector2(40f, -190f);
+        modulesRect.sizeDelta = new Vector2(1600f, 34f);
+        modulesText = NewLabel(modulesRect, 22, TextAnchor.UpperLeft);
+        modulesText.color = new Color(1f, 0.85f, 0.3f);
+    }
+
+    void RefreshStatusLine()
+    {
+        if (healthText == null) return;   // main menu has no HUD
+        if (statusText == null) BuildStatusLine();
+        if (statusPlayer == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p == null) return;
+            statusPlayer = p.GetComponent<PlayerController>();
+            statusBuffs = p.GetComponent<PlayerBuffs>();
+        }
+
+        var sb = new System.Text.StringBuilder();
+        // Dash: 6 blocks that fill while recharging
+        int filled = Mathf.RoundToInt(statusPlayer.DashReady * 6f);
+        sb.Append(statusPlayer.DashReady >= 1f ? "<color=#73f2ff>DASH </color>" : "<color=#667788>DASH </color>");
+        sb.Append(new string('■', filled)).Append("<color=#333a40>").Append(new string('■', 6 - filled)).Append("</color>");
+        if (statusBuffs != null)
+        {
+            if (statusBuffs.ShieldTimeLeft > 0f)
+                sb.Append("    <color=#73f2ff>SHIELD x").Append(statusBuffs.ShieldHitsLeft).Append("  ").Append(Mathf.CeilToInt(statusBuffs.ShieldTimeLeft)).Append("s</color>");
+            if (statusBuffs.OverdriveTimeLeft > 0f)
+                sb.Append("    <color=#ff9933>OVERDRIVE x2  ").Append(Mathf.CeilToInt(statusBuffs.OverdriveTimeLeft)).Append("s</color>");
+        }
+        statusText.text = sb.ToString();
+
+        var modules = new System.Collections.Generic.List<string>();
+        foreach (PlayerUpgrades.Module m in PlayerUpgrades.All) modules.Add(PlayerUpgrades.Info[m].name);
+        modulesText.text = modules.Count > 0 ? "MODULES: " + string.Join("  //  ", modules) : "";
+    }
+
     // Security alarm (a Scanner found the Robot): three red pulses and a warning line
     public void ShowAlarm(string text)
     {
@@ -365,6 +439,7 @@ public class UIManager : MonoBehaviour
     {
         RelayManager.ResetProgress();
         PlayerProgression.ResetProgress();
+        PlayerUpgrades.ResetProgress();
         LoadingScreen.Load(firstRoomScene);
     }
 

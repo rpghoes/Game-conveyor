@@ -89,6 +89,15 @@ public static class Fx
 
     static Color Clear(Color c) { return new Color(c.r, c.g, c.b, 0f); }
 
+    // A fading copy of a sprite (dash trail). Keeps the source's facing and size.
+    public static void Afterimage(SpriteRenderer source, Color color, float lifetime)
+    {
+        if (source == null || source.sprite == null) return;
+        FxParticle p = Spawn(source.sprite, source.transform.position, Vector2.zero, lifetime, 1f, 1f, color, new Color(color.r, color.g, color.b, 0f), 0f, 0f, -SortingOrder + source.sortingOrder - 1);
+        p.baseScale = source.transform.lossyScale;
+        p.GetComponent<SpriteRenderer>().flipX = source.flipX;
+    }
+
     // Small burst of square sparks
     public static void Sparks(Vector2 position, Color color, int count, float speed)
     {

@@ -169,6 +169,10 @@ public static class SoundGenerator
             { "SFX_ScanBeep", ScanBeep },
             { "SFX_GuardStrike", GuardStrike },
             { "SFX_GuardNotice", GuardNotice },
+            { "SFX_Dash", Dash },
+            { "SFX_Pickup", Pickup },
+            { "SFX_ShieldUp", ShieldUp },
+            { "SFX_ShieldBreak", ShieldBreak },
         };
         var music = new Dictionary<string, System.Func<float[]>>
         {
@@ -487,6 +491,42 @@ public static class SoundGenerator
         var b = Buffer(0.35f);
         Tone(b, 0f, 0.15f, 200f, 420f, Wave.Saw, 0.2f, decay: 0.8f);
         Tone(b, 0.15f, 0.15f, 980f, 980f, Wave.Square, 0.2f, decay: 1.2f, duty: 0.25f);
+        return b;
+    }
+
+    // Dash: short hydraulic whoosh
+    static float[] Dash()
+    {
+        var b = Buffer(0.25f);
+        Noise(b, 0f, 0.22f, 0.6f, 0.15f, 0.7f, decay: 1.5f, attack: 0.02f);
+        Tone(b, 0f, 0.15f, 300f, 700f, Wave.Saw, 0.12f, decay: 1.5f);
+        return b;
+    }
+
+    // Item pickup: bright two-note chime
+    static float[] Pickup()
+    {
+        var b = Buffer(0.4f);
+        Tone(b, 0f, 0.12f, Midi(76), Midi(76), Wave.Square, 0.25f, decay: 1f, duty: 0.25f);
+        Tone(b, 0.09f, 0.28f, Midi(83), Midi(83), Wave.Square, 0.25f, decay: 1.5f, duty: 0.25f);
+        return b;
+    }
+
+    // Energy shield on: rising hum
+    static float[] ShieldUp()
+    {
+        var b = Buffer(0.6f);
+        Tone(b, 0f, 0.55f, 180f, 720f, Wave.Triangle, 0.35f, attack: 0.05f, decay: 1f, vibratoHz: 20f, vibratoDepth: 0.03f);
+        Tone(b, 0.1f, 0.45f, 360f, 1440f, Wave.Sine, 0.15f, attack: 0.05f, decay: 1.5f);
+        return b;
+    }
+
+    // Energy shield gone: glassy crack
+    static float[] ShieldBreak()
+    {
+        var b = Buffer(0.5f);
+        Noise(b, 0f, 0.3f, 0.6f, 1f, 0.3f, decay: 2.5f, highpass: true);
+        Tone(b, 0f, 0.4f, 1500f, 300f, Wave.Triangle, 0.25f, decay: 2f);
         return b;
     }
 

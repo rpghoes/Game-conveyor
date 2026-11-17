@@ -1,7 +1,8 @@
 using UnityEngine;
 
-// Moves Unit 0412: running, jumping, double jumping and turning around.
+// Moves Unit 0412: running, jumping, double jumping, dashing and turning around.
 // Standing on a ConveyorBelt adds the belt speed. Input comes from GameInput (keyboard / gamepad).
+// Personality: a small squash when landing (dust), and when left alone it stops and looks around.
 // Also sends movement values to the Animator (Speed, Grounded, VerticalVelocity).
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
@@ -30,6 +31,18 @@ public class PlayerController : MonoBehaviour
     public float shortHopGravityMultiplier = 2f;
     public float maxFallSpeed = 22f;
 
+    [Header("Dash")]
+    public float dashSpeed = 19f;
+    public float dashTime = 0.14f;
+    public float dashCooldown = 0.75f;
+    [Tooltip("Dashes allowed before touching the ground again")]
+    public int airDashes = 1;
+    public Color dashTrailColor = new Color(0.45f, 0.95f, 1f, 0.55f);
+
+    [Header("Personality")]
+    [Tooltip("Standing still this long makes the Robot look around")]
+    public float idleLookDelay = 4f;
+
     [Header("Ground Check")]
     public Transform groundCheck;
     public Vector2 groundCheckSize = new Vector2(0.6f, 0.12f);
@@ -41,6 +54,7 @@ public class PlayerController : MonoBehaviour
 
     [Header("Audio")]
     public AudioSource jumpSound;
+    public AudioSource dashSound;
 
     // PlayerHealth turns this off while the Robot is dead; cutscenes turn it off too
     [HideInInspector] public bool canControl = true;
@@ -50,6 +64,10 @@ public class PlayerController : MonoBehaviour
     public float FacingDirection => FacingRight ? 1f : -1f;
     // Speed of the conveyor belt under the Robot's feet (0 when not on a belt)
     public float BeltSpeed { get; private set; }
+    public bool IsDashing => dashTimer > 0f;
+    // 0 = just used, 1 = ready (for the HUD)
+    public float DashReady => CurrentDashCooldown <= 0f ? 1f : Mathf.Clamp01(1f - (nextDashTime - Time.time) / CurrentDashCooldown);
+    float CurrentDashCooldown => dashCooldown * PlayerUpgrades.DashCooldownMultiplier;
 
     private Rigidbody2D rb;
     private Animator animator;
@@ -58,11 +76,24 @@ public class PlayerController : MonoBehaviour
     private int jumpsUsed;
     private float lastGroundedTime = -10f;
     private float knockbackTimer;
+    private float dashTimer;
+    private float dashDirection;
+    private float nextDashTime;
+    private int dashesUsed;
+    private float trailTimer;
+    private bool wasGrounded = true;
+    private float idleTime;
+    private float nextLookTime;
+    private SpriteRenderer spriteRenderer;
+    private Vector3 baseScale;
+    private float squash;          // > 0 = squashed (landing), < 0 = stretched (jump)
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        baseScale = new Vector3(Mathf.Abs(transform.localScale.x), transform.localScale.y, transform.localScale.z);
         rb.gravityScale = gravityScale;
         SetFacing(true);
     }
@@ -75,7 +106,10 @@ public class PlayerController : MonoBehaviour
         {
             moveInput = 0f;
             jumpHeld = false;
+            dashTimer = 0f;
+            idleTime = 0f;
             UpdateAnimator();
+            UpdateSquash();
             return;
         }
 
@@ -86,16 +120,86 @@ public class PlayerController : MonoBehaviour
         jumpHeld = GameInput.JumpHeld;
         if (GameInput.JumpPressed) TryJump();
 
-        // --- Turn around ---
-        if (moveInput > 0f && !FacingRight) SetFacing(true);
-        else if (moveInput < 0f && FacingRight) SetFacing(false);
+        // --- Dash ---
+        if (GameInput.DashPressed) TryDash();
 
+        // --- Turn around ---
+        if (!IsDashing)
+        {
+            if (moveInput > 0f && !FacingRight) SetFacing(true);
+            else if (moveInput < 0f && FacingRight) SetFacing(false);
+        }
+
+        LookAroundWhenIdle();
         UpdateAnimator();
+        UpdateSquash();
+    }
+
+    // ---------------- Dash ----------------
+
+    void TryDash()
+    {
+        if (IsDashing || knockbackTimer > 0f || Time.time < nextDashTime) return;
+        if (!IsGrounded && dashesUsed >= airDashes) return;
+        dashDirection = Mathf.Abs(moveInput) > 0.01f ? Mathf.Sign(moveInput) : FacingDirection;
+        SetFacing(dashDirection > 0f);
+        dashTimer = dashTime;
+        nextDashTime = Time.time + dashTime + CurrentDashCooldown;
+        if (!IsGrounded) dashesUsed++;
+        trailTimer = 0f;
+        squash = -0.25f;
+        if (dashSound != null) dashSound.Play();
+        Fx.Sparks((Vector2)transform.position + new Vector2(-dashDirection * 0.3f, 0.3f), new Color(0.8f, 0.8f, 0.85f), 5, 3f);
+    }
+
+    // ---------------- Personality ----------------
+
+    // Standing still for a while, Unit 0412 glances around: it is not supposed to be curious
+    void LookAroundWhenIdle()
+    {
+        bool still = IsGrounded && Mathf.Abs(moveInput) < 0.01f && Mathf.Abs(rb.linearVelocity.x - BeltSpeed) < 0.2f;
+        if (!still)
+        {
+            idleTime = 0f;
+            return;
+        }
+        idleTime += Time.deltaTime;
+        if (idleTime < idleLookDelay) return;
+        if (Time.time >= nextLookTime)
+        {
+            SetFacing(!FacingRight);
+            nextLookTime = Time.time + Random.Range(0.9f, 2.2f);
+        }
+    }
+
+    // Squash and stretch on top of the facing scale (the Robot art has no jump/land frames yet)
+    void UpdateSquash()
+    {
+        squash = Mathf.MoveTowards(squash, 0f, Time.deltaTime * 2.5f);
+        float sx = 1f + squash * 0.6f;
+        float sy = 1f - squash;
+        transform.localScale = new Vector3(Mathf.Sign(transform.localScale.x) * baseScale.x * sx, baseScale.y * sy, baseScale.z);
     }
 
     void FixedUpdate()
     {
         Vector2 velocity = rb.linearVelocity;
+
+        if (IsDashing)
+        {
+            // Straight horizontal burst, no gravity; leaves a trail of afterimages
+            dashTimer -= Time.fixedDeltaTime;
+            rb.gravityScale = 0f;
+            rb.linearVelocity = new Vector2(dashDirection * dashSpeed, 0f);
+            trailTimer -= Time.fixedDeltaTime;
+            if (trailTimer <= 0f)
+            {
+                trailTimer = 0.035f;
+                Fx.Afterimage(spriteRenderer, dashTrailColor, 0.22f);
+            }
+            if (dashTimer <= 0f) rb.linearVelocity = new Vector2(dashDirection * moveSpeed, 0f);
+            return;
+        }
 
         if (knockbackTimer > 0f)
         {
@@ -107,7 +211,7 @@ public class PlayerController : MonoBehaviour
             // Smoothly speed up / slow down towards the target speed
             // Levels make the Robot a little faster
             // On a conveyor belt "standing still" means moving with the belt
-            float targetSpeed = moveInput * moveSpeed * PlayerProgression.PlayerMoveSpeedMultiplier + BeltSpeed;
+            float targetSpeed = moveInput * moveSpeed * PlayerProgression.PlayerMoveSpeedMultiplier * PlayerUpgrades.SpeedMultiplier + BeltSpeed;
             float rate = Mathf.Abs(moveInput) > 0.01f ? acceleration : deceleration;
             if (!IsGrounded) rate *= airControl;
             velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, rate * Time.fixedDeltaTime);
@@ -134,8 +238,22 @@ public class PlayerController : MonoBehaviour
         if (IsGrounded)
         {
             jumpsUsed = 0;
+            dashesUsed = 0;
             lastGroundedTime = Time.time;
         }
+
+        // Landing: squash + a puff of dust
+        if (IsGrounded && !wasGrounded && rb != null)
+        {
+            squash = 0.22f;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector2 at = (Vector2)transform.position + new Vector2(Random.Range(-0.4f, 0.4f), 0.05f);
+                Fx.Spawn(Fx.Circle, at, new Vector2(Random.Range(-1.5f, 1.5f), Random.Range(0.2f, 0.8f)), 0.35f, 0.25f, 0.6f,
+                    new Color(0.65f, 0.6f, 0.55f, 0.45f), new Color(0.65f, 0.6f, 0.55f, 0f), 0f, 3f, -25);
+            }
+        }
+        wasGrounded = IsGrounded;
     }
 
     void TryJump()
@@ -162,6 +280,7 @@ public class PlayerController : MonoBehaviour
 
     void Jump(float force)
     {
+        squash = -0.15f;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, force);
         IsGrounded = false;
         lastGroundedTime = -10f; // no coyote jump after a real jump
@@ -171,6 +290,7 @@ public class PlayerController : MonoBehaviour
     // Called by PlayerHealth when the Robot gets hit
     public void ApplyKnockback(Vector2 velocity, float controlLockTime)
     {
+        dashTimer = 0f;
         rb.linearVelocity = velocity;
         knockbackTimer = controlLockTime;
     }
@@ -179,6 +299,7 @@ public class PlayerController : MonoBehaviour
     {
         moveInput = 0f;
         knockbackTimer = 0f;
+        dashTimer = 0f;
         rb.linearVelocity = Vector2.zero;
     }
 
@@ -197,6 +318,7 @@ public class PlayerController : MonoBehaviour
         float size = Mathf.Abs(scale.x);
         scale.x = (faceRight == artFacesRight) ? size : -size;
         transform.localScale = scale;
+        idleTime = Mathf.Min(idleTime, idleLookDelay);
     }
 
     void UpdateAnimator()
