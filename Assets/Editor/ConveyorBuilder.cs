@@ -864,6 +864,8 @@ public static class ConveyorBuilder
         public bool intro;
         // Boss arenas: where the boss weapon may reach, and where the fight starts
         public int arenaMinX = 2, arenaMaxX = 34, activationX = 6;
+        // Camera half-height; boss arenas zoom out so the whole hall (and the boss) is in view
+        public float cameraSize = 7f;
         public Color background, tint;
         public char[,] cells;
         public List<Thing> things = new List<Thing>();
@@ -1010,7 +1012,7 @@ public static class ConveyorBuilder
             hint = "WAIT FOR THE MANIPULATOR TO GET STUCK - THEN STRIKE IT",
             next = "Section_04_Relay",
             background = new Color(0.1f, 0.05f, 0.03f), tint = new Color(1f, 0.8f, 0.65f),
-            arenaMinX = 2, arenaMaxX = 34, activationX = 6
+            arenaMinX = 2, arenaMaxX = 34, activationX = 6, cameraSize = 10f
         };
         r.Solid(0, 0, 44, 2).Belt(2, 1, 19, 2f).Belt(23, 1, 19, -2f)
          .Platform(4, 6, 5).Platform(31, 6, 4)
@@ -1046,7 +1048,7 @@ public static class ConveyorBuilder
             title = "SECTION 05 // CONTROL ROOM",
             next = "Ending_Surface", requiredRelays = 3,
             background = new Color(0.08f, 0.03f, 0.03f), tint = new Color(0.95f, 0.75f, 0.7f),
-            activationX = 5
+            activationX = 5, cameraSize = 11f
         };
         r.Solid(0, 0, 48, 2).Belt(3, 1, 20, 2f).Belt(25, 1, 20, -2f)
          .Platform(6, 7, 5).Platform(37, 7, 5).Platform(20, 11, 8);
@@ -1227,7 +1229,7 @@ public static class ConveyorBuilder
         var cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
         var cam = cameraObject.AddComponent<Camera>();
         cam.orthographic = true;
-        cam.orthographicSize = 7f;
+        cam.orthographicSize = room.cameraSize;
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = room.background;
         cameraObject.AddComponent<AudioListener>();
@@ -1598,7 +1600,7 @@ public static class ConveyorBuilder
         go.transform.position = feet;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = LoadSprite(ArtRobot + "Robot.png");
-        sr.color = new Color(0.38f, 0.36f, 0.35f);
+        sr.color = new Color(0.72f, 0.7f, 0.68f);   // switched off: grey, but readable on the dark hall
         sr.sortingOrder = SortEnemies - 1;
         return go.transform;
     }

@@ -208,8 +208,14 @@ public class EndingSequence : MonoBehaviour
     {
         factoryRoot = new GameObject("FactoryBelow").transform;
         Rect(factoryRoot, Vector2.zero, new Vector2(30f, 16f), new Color(0.07f, 0.06f, 0.05f), -50);
-        // A lamp over the assembly station
-        Rect(factoryRoot, new Vector2(0f, 1.5f), new Vector2(6f, 7f), new Color(1f, 0.75f, 0.4f, 0.08f), -45);
+        // A lamp over the assembly station: a soft pool of light, not a box
+        SpriteRenderer lightPool = new GameObject("LampLight").AddComponent<SpriteRenderer>();
+        lightPool.transform.SetParent(factoryRoot, false);
+        lightPool.sprite = Fx.Circle;
+        lightPool.color = new Color(1f, 0.75f, 0.4f, 0.1f);
+        lightPool.sortingOrder = -45;
+        lightPool.transform.position = new Vector3(0f, -0.5f, 0f);
+        lightPool.transform.localScale = new Vector3(7f, 9f, 1f);
         Rect(factoryRoot, new Vector2(0f, 5f), new Vector2(1.4f, 0.25f), new Color(1f, 0.85f, 0.5f), -44);
         // The production line
         for (float x = -12f; x <= 12f; x += 1f)

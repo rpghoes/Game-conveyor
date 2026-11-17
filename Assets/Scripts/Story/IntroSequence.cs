@@ -81,11 +81,14 @@ public class IntroSequence : MonoBehaviour
     void Update()
     {
         if (belt == null || cargo == null) return;
+        // The furnace is where the line normally runs (the sign of the belt's starting speed),
+        // not where it happens to move right now - a jammed belt (speed 0) must not "recycle" anything
+        float towardsFurnace = Mathf.Sign(beltSpeed != 0f ? beltSpeed : belt.speed);
         foreach (Transform unit in cargo)
         {
             if (unit == null || !unit.gameObject.activeSelf) continue;
             unit.position += Vector3.right * belt.CurrentSpeed * Time.deltaTime;
-            bool reachedFurnace = belt.CurrentSpeed < 0f ? unit.position.x <= furnaceX : unit.position.x >= furnaceX;
+            bool reachedFurnace = towardsFurnace < 0f ? unit.position.x <= furnaceX : unit.position.x >= furnaceX;
             if (!reachedFurnace) continue;
             // Recycled
             Vector2 at = (Vector2)unit.position + Vector2.up * 0.6f;

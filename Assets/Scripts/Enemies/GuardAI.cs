@@ -18,6 +18,8 @@ public class GuardAI : MonoBehaviour
     public float patrolSpeed = 2f;
     [Tooltip("Pause at the end of the route / at an edge before turning around")]
     public float turnPause = 0.6f;
+    [Tooltip("Slowest ground speed while walking against a conveyor belt")]
+    public float minHeadway = 1.2f;
 
     [Header("Chase")]
     public float detectionRange = 7f;
@@ -196,7 +198,12 @@ public class GuardAI : MonoBehaviour
             }
         }
 
-        rb.linearVelocity = new Vector2(velocityX + belt, rb.linearVelocity.y);
+        // Standing still, the Guard rides the belt. Walking against a fast belt it still makes headway
+        // (otherwise a belt faster than its walk would push it off its route for good)
+        float net = velocityX + belt;
+        if (Mathf.Abs(velocityX) > 0.01f && (Mathf.Sign(net) != Mathf.Sign(velocityX) || Mathf.Abs(net) < minHeadway))
+            net = Mathf.Sign(velocityX) * minHeadway;
+        rb.linearVelocity = new Vector2(net, rb.linearVelocity.y);
         SetAnimSpeed(Mathf.Abs(velocityX));
         // A little bob while walking: heavy mechanical steps
         if (Mathf.Abs(velocityX) > 0.1f && !attacking)

@@ -136,7 +136,7 @@ public class IndustrialPress : MonoBehaviour
         {
             timer += Time.deltaTime;
             float t = timer / warning;
-            SetShadow(Mathf.Lerp(0.25f, 1f, t));
+            SetShadow(Mathf.Lerp(0.5f, 1f, t));   // clearly visible from the first moment
             SetLamp(Mathf.FloorToInt(timer * (6f + 10f * t)) % 2 == 0);
             // the head twitches just before falling
             float twitch = t > 0.75f ? Mathf.Sin(timer * 80f) * 0.05f : 0f;
