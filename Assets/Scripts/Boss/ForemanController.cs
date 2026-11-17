@@ -145,6 +145,7 @@ public class ForemanController : MonoBehaviour
         }
         PlayAnim("Slam");
         CameraFollow.Shake(0.15f, 0.4f);
+        CameraFollow.SetFocus(transform);   // keep the Foreman on its post in view during the fight
         yield return new WaitForSeconds(1.5f);
         StartCoroutine(AttackLoop());
     }
@@ -338,6 +339,7 @@ public class ForemanController : MonoBehaviour
         deathHandled = true;
         IsStuck = false;
         StopAllCoroutines();
+        CameraFollow.SetFocus(null);
         SetShadow(0f, Color.black);
         if (deathSound != null) deathSound.Play();
         // The hall goes quiet: belts and presses stop

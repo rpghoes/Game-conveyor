@@ -415,6 +415,20 @@ public class ConveyorSmokeTest : MonoBehaviour
         fh.TakeDamage(PlayerProgression.HitValue, Vector2.zero);
         Check(fh.CurrentHealth == before, "foreman: armoured while not stuck");
 
+        // The camera leans towards the Foreman: its post stays in view even from the left of the hall
+        Teleport(new Vector2(7f, 2.1f));
+        yield return Wait(1.2f);
+        Camera view = Camera.main;
+        CameraFollow follow = CameraFollow.Instance;
+        float halfWidth = view.orthographicSize * view.aspect;
+        float px = Player.transform.position.x;
+        // As far towards the Foreman as the Robot's edge margin (and the room bounds) allow
+        float expected = Mathf.Min(px + halfWidth - follow.focusEdgeMargin, (px + foreman.transform.position.x) * 0.5f, follow.maxBounds.x - halfWidth);
+        float camX = view.transform.position.x;
+        Check(follow.focus == foreman.transform && camX > expected - 0.8f && px - (camX - halfWidth) > follow.focusEdgeMargin - 0.8f,
+            "camera: leans towards the Foreman, the Robot stays in view (cam " + camX.ToString("0.0") + ", expected " + expected.ToString("0.0")
+            + ", right edge " + (camX + halfWidth).ToString("0.0") + ", Foreman " + foreman.transform.position.x.ToString("0.0") + ", aspect " + view.aspect.ToString("0.00") + ")");
+
         bool belts = false;
         int cycles = 0;
         float t = 0f;

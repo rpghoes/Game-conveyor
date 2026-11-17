@@ -18,6 +18,12 @@ public class CameraFollow : MonoBehaviour
     public Vector2 minBounds = Vector2.zero;
     public Vector2 maxBounds = new Vector2(50f, 20f);
 
+    [Header("Boss focus")]
+    [Tooltip("While set, the camera leans towards this point (a boss) as far as it can while the Robot stays in view")]
+    public Transform focus;
+    [Tooltip("How close the Robot may get to the screen edge while the camera leans towards the focus")]
+    public float focusEdgeMargin = 4f;
+
     private Camera cam;
     private Vector3 velocity;
     private Vector3 followPosition;   // camera position without shake
@@ -73,9 +79,23 @@ public class CameraFollow : MonoBehaviour
         transform.rotation = Quaternion.identity; // never rotate
     }
 
+    public static void SetFocus(Transform point)
+    {
+        if (Instance != null) Instance.focus = point;
+    }
+
     Vector3 DesiredPosition()
     {
-        return new Vector3(target.position.x + offset.x, target.position.y + offset.y, -10f);
+        float x = target.position.x + offset.x;
+        if (focus != null && cam != null)
+        {
+            // Lean towards the boss, but never so far that the Robot gets closer than the margin to the edge
+            float halfWidth = cam.orthographicSize * cam.aspect;
+            float reach = Mathf.Max(0f, halfWidth - focusEdgeMargin);
+            float wanted = (target.position.x + focus.position.x) * 0.5f;
+            x = Mathf.Clamp(wanted, target.position.x - reach, target.position.x + reach);
+        }
+        return new Vector3(x, target.position.y + offset.y, -10f);
     }
 
     Vector3 ClampToBounds(Vector3 position)
