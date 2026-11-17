@@ -2,9 +2,9 @@ using UnityEngine;
 
 // All numbers of the level-up system in one asset: XP, how the Robot grows, and how enemies,
 // the mini-boss and the final boss scale with the Robot's level.
-// The game loads Assets/Resources/ProgressionSettings.asset (SYSTEM-REBOOT > 1. Setup Project creates it).
+// The game loads Assets/Resources/ProgressionSettings.asset (CONVEYOR > 1. Setup Project creates it).
 // If the asset is missing, the defaults below are used.
-[CreateAssetMenu(fileName = "ProgressionSettings", menuName = "SYSTEM-REBOOT/Progression Settings")]
+[CreateAssetMenu(fileName = "ProgressionSettings", menuName = "CONVEYOR/Progression Settings")]
 public class ProgressionSettings : ScriptableObject
 {
     // Enemy strength for a range of Robot levels. The tier with the highest minPlayerLevel

@@ -7,7 +7,7 @@ using UnityEngine;
 // The boss goes through a chain of small explosions before the final blast.
 public class EnemyHealth : MonoBehaviour
 {
-    // Any enemy got hit (enemy, killed?). The Robot's ultimate charges from this.
+    // Any enemy got hit (enemy, killed?)
     public static event System.Action<EnemyHealth, bool> Damaged;
 
     [Tooltip("Base health in hits. Real HP = hits x hitValue x the difficulty multiplier for the Robot's level (ProgressionSettings)")]
@@ -54,7 +54,6 @@ public class EnemyHealth : MonoBehaviour
     private bool isBoss;
     private EnemyHealthBar healthBar;
     private float nextBlockedLabel;
-    private string killId;
 
     void Awake()
     {
@@ -69,10 +68,6 @@ public class EnemyHealth : MonoBehaviour
         Scaling = PlayerProgression.TierFor(Rank);
         MaxHealth = Mathf.Max(1, Mathf.RoundToInt(maxHealth * PlayerProgression.HitValue * Scaling.health));
         CurrentHealth = MaxHealth;
-
-        // Same enemy = same ID even if its room is loaded again, so it never gives XP twice
-        Vector3 start = transform.position;
-        killId = gameObject.scene.name + "/" + name + "@" + Mathf.RoundToInt(start.x * 10f) + "," + Mathf.RoundToInt(start.y * 10f);
 
         if (explosionColor.a <= 0f)
         {
@@ -135,8 +130,6 @@ public class EnemyHealth : MonoBehaviour
         IsDead = true;
         if (animator != null) animator.SetBool("Dead", true);
 
-        int xp = PlayerProgression.RegisterKill(killId, Rank);
-        if (xp > 0) DamageNumber.Show(TopOfSprite + Vector2.up * 0.5f, "+" + xp + " XP", DamageNumber.XpColor, isBoss ? 1.4f : 0.9f, 1.1f);
         if (deathSound != null) deathSound.Play();
 
         // Stop colliding and stop moving

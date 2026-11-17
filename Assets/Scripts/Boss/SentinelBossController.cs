@@ -592,7 +592,7 @@ public class SentinelBossController : MonoBehaviour
         telegraphs.Clear();
         if (animator != null) animator.speed = 1f;
         if (deathSound != null) deathSound.Play();
-        if (UIManager.Instance != null) UIManager.Instance.ShowBossDefeated();
+        if (UIManager.Instance != null) UIManager.Instance.HideBossBar();
     }
 
     void OnDrawGizmosSelected()

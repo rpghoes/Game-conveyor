@@ -4,7 +4,7 @@ using UnityEngine;
 
 // EDITOR-ONLY TOOL (not part of the game).
 // Makes sure Assets/Resources/ProgressionSettings.asset exists - the game loads all XP / level /
-// difficulty numbers from it. Runs once when the project opens, and from SYSTEM-REBOOT > 1. Setup Project.
+// difficulty numbers from it. Runs once when the project opens, and from CONVEYOR > 1. Setup Project.
 // Select the asset to tune the values; deleting it brings back the defaults.
 [InitializeOnLoad]
 public static class ProgressionSettingsCreator
@@ -20,7 +20,7 @@ public static class ProgressionSettingsCreator
         };
     }
 
-    [MenuItem("SYSTEM-REBOOT/Select Progression Settings")]
+    [MenuItem("CONVEYOR/Select Progression Settings")]
     public static void SelectAsset()
     {
         Selection.activeObject = EnsureAsset();
@@ -36,7 +36,7 @@ public static class ProgressionSettingsCreator
         settings = ScriptableObject.CreateInstance<ProgressionSettings>();
         AssetDatabase.CreateAsset(settings, AssetPath);
         AssetDatabase.SaveAssets();
-        Debug.Log("SYSTEM-REBOOT: created " + AssetPath);
+        Debug.Log("CONVEYOR: created " + AssetPath);
         return settings;
     }
 }

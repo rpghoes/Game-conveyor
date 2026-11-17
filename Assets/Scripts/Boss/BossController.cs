@@ -340,8 +340,8 @@ public class BossController : MonoBehaviour
         if (deathSound != null) deathSound.Play();
         if (UIManager.Instance != null)
         {
-            if (isMiniBoss) UIManager.Instance.ShowMiniBossDefeated();
-            else UIManager.Instance.ShowBossDefeated();
+            UIManager.Instance.HideBossBar();
+            UIManager.Instance.ShowBanner(bossName + " OFFLINE", 3f);
         }
     }
 

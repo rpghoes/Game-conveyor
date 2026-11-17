@@ -61,7 +61,7 @@ public static class PlayerProgression
     public static float PlayerMoveSpeedMultiplier => 1f + Mathf.Min(Settings.moveSpeedPerLevel * LevelsGained, Settings.maxMoveSpeedBonus);
     public static float UltimateChargeMultiplier => 1f + Settings.ultimateChargePerLevel * LevelsGained;
 
-    // Robot attack in hits (PlayerCombat.damage / PlayerUltimate.damage) -> HP points
+    // Robot attack in hits (PlayerCombat.damage) -> HP points
     public static int PlayerDamage(int baseHits)
     {
         return Mathf.Max(1, Mathf.RoundToInt(baseHits * HitValue * PlayerDamageMultiplier));

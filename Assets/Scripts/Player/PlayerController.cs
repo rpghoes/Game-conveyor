@@ -1,7 +1,7 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
-// Moves the Robot: running, jumping, double jumping and turning around.
+// Moves Unit 0412: running, jumping, double jumping and turning around.
+// Standing on a ConveyorBelt adds the belt speed. Input comes from GameInput (keyboard / gamepad).
 // Also sends movement values to the Animator (Speed, Grounded, VerticalVelocity).
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
@@ -42,15 +42,14 @@ public class PlayerController : MonoBehaviour
     [Header("Audio")]
     public AudioSource jumpSound;
 
-    // PlayerHealth turns this off while the Robot is dead
+    // PlayerHealth turns this off while the Robot is dead; cutscenes turn it off too
     [HideInInspector] public bool canControl = true;
-    // PlayerUltimate turns this on: gravity and steering are off, the Robot just drifts at frozenVelocity
-    [HideInInspector] public bool frozen;
-    [HideInInspector] public Vector2 frozenVelocity;
 
     public bool IsGrounded { get; private set; }
     public bool FacingRight { get; private set; } = true;
     public float FacingDirection => FacingRight ? 1f : -1f;
+    // Speed of the conveyor belt under the Robot's feet (0 when not on a belt)
+    public float BeltSpeed { get; private set; }
 
     private Rigidbody2D rb;
     private Animator animator;
@@ -72,8 +71,7 @@ public class PlayerController : MonoBehaviour
     {
         CheckGround();
 
-        Keyboard keyboard = Keyboard.current;
-        if (!canControl || keyboard == null)
+        if (!canControl)
         {
             moveInput = 0f;
             jumpHeld = false;
@@ -82,13 +80,11 @@ public class PlayerController : MonoBehaviour
         }
 
         // --- Horizontal input ---
-        moveInput = 0f;
-        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) moveInput -= 1f;
-        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) moveInput += 1f;
+        moveInput = GameInput.Horizontal;
 
         // --- Jump ---
-        jumpHeld = keyboard.spaceKey.isPressed;
-        if (keyboard.spaceKey.wasPressedThisFrame) TryJump();
+        jumpHeld = GameInput.JumpHeld;
+        if (GameInput.JumpPressed) TryJump();
 
         // --- Turn around ---
         if (moveInput > 0f && !FacingRight) SetFacing(true);
@@ -99,13 +95,6 @@ public class PlayerController : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (frozen)
-        {
-            rb.gravityScale = 0f;
-            rb.linearVelocity = frozenVelocity;
-            return;
-        }
-
         Vector2 velocity = rb.linearVelocity;
 
         if (knockbackTimer > 0f)
@@ -117,8 +106,9 @@ public class PlayerController : MonoBehaviour
         {
             // Smoothly speed up / slow down towards the target speed
             // Levels make the Robot a little faster
-            float targetSpeed = moveInput * moveSpeed * PlayerProgression.PlayerMoveSpeedMultiplier;
-            float rate = Mathf.Abs(targetSpeed) > 0.01f ? acceleration : deceleration;
+            // On a conveyor belt "standing still" means moving with the belt
+            float targetSpeed = moveInput * moveSpeed * PlayerProgression.PlayerMoveSpeedMultiplier + BeltSpeed;
+            float rate = Mathf.Abs(moveInput) > 0.01f ? acceleration : deceleration;
             if (!IsGrounded) rate *= airControl;
             velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, rate * Time.fixedDeltaTime);
         }
@@ -134,11 +124,12 @@ public class PlayerController : MonoBehaviour
 
     void CheckGround()
     {
-        bool touchingGround = Physics2D.OverlapBox(groundCheck.position, groundCheckSize, 0f, groundLayer);
+        Collider2D ground = Physics2D.OverlapBox(groundCheck.position, groundCheckSize, 0f, groundLayer);
 
         // Only count as grounded when not moving up, so passing up through
         // a one-way platform doesn't refill the jumps
-        IsGrounded = touchingGround && rb.linearVelocity.y <= 0.1f;
+        IsGrounded = ground != null && rb.linearVelocity.y <= 0.1f;
+        BeltSpeed = IsGrounded ? ConveyorBelt.SpeedUnder(ground) : 0f;
 
         if (IsGrounded)
         {
@@ -189,6 +180,12 @@ public class PlayerController : MonoBehaviour
         moveInput = 0f;
         knockbackTimer = 0f;
         rb.linearVelocity = Vector2.zero;
+    }
+
+    // Cutscenes turn the Robot to look around
+    public void LookTowards(bool right)
+    {
+        SetFacing(right);
     }
 
     void SetFacing(bool faceRight)

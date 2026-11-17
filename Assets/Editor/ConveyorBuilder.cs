@@ -13,13 +13,13 @@ using UnityEngine.Tilemaps;
 using UnityEngine.UI;
 
 // EDITOR-ONLY TOOL (not part of the game).
-// Builds the SYSTEM-REBOOT prototype from the art in Assets/Art:
-//   SYSTEM-REBOOT > 1. Setup Project   -> tags/layers, sprite import + slicing, tiles, animations, prefabs
-//   SYSTEM-REBOOT > 2. Build All Scenes -> MainMenu + Room_01..Room_10 and the Build Profiles scene list
-//   SYSTEM-REBOOT > 3. Generate & Assign Sounds -> see SoundGenerator.cs (safe to re-run, does not touch rooms)
-// Re-running step 2 OVERWRITES the room scenes, so once the team starts editing rooms by hand,
-// don't run it again (or delete this file).
-public static class SystemRebootBuilder
+// Builds CONVEYOR from the art in Assets/Art (+ generated placeholders in Assets/Art/Placeholders):
+//   CONVEYOR > 1. Setup Project   -> tags/layers, placeholder art, sprite import + slicing, tiles, animations, prefabs
+//   CONVEYOR > 2. Build All Scenes -> MainMenu + Section_01..Section_05 + Ending_Surface and the Build Profiles scene list
+//   CONVEYOR > 3. Generate & Assign Sounds -> see SoundGenerator.cs (safe to re-run, does not touch sections)
+// Re-running step 2 OVERWRITES the section scenes, so once the team starts editing sections by hand,
+// don't run it again (or move the hand-made changes into the section definitions below).
+public static class ConveyorBuilder
 {
     const int PPU = 32;
     const int GroundLayer = 6, EnemyLayer = 7, PlayerLayer = 8, PlayerAttackLayer = 9;
@@ -33,10 +33,11 @@ public static class SystemRebootBuilder
     // Sorting orders
     const int SortBackground = -20, SortDecor = -10, SortTiles = 0, SortHazards = 2, SortProps = 3, SortEnemies = 5, SortBoss = 6, SortProjectiles = 8, SortPlayer = 10;
 
-    [MenuItem("SYSTEM-REBOOT/1. Setup Project (art, animations, prefabs)")]
+    [MenuItem("CONVEYOR/1. Setup Project (art, animations, prefabs)")]
     public static void SetupProject()
     {
         SetupTagsAndLayers();
+        PlaceholderArt.EnsureAll();
         ImportArt();
         CreateTiles();
         CreateAnimations();
@@ -44,18 +45,22 @@ public static class SystemRebootBuilder
         CreatePrefabs();
         ProgressionSettingsCreator.EnsureAsset();
         AssetDatabase.SaveAssets();
-        Debug.Log("SYSTEM-REBOOT: project setup complete");
+        Debug.Log("CONVEYOR: project setup complete");
     }
 
-    [MenuItem("SYSTEM-REBOOT/2. Build All Scenes")]
+    const string SceneFolder = "Assets/Scenes/Conveyor/";
+
+    [MenuItem("CONVEYOR/2. Build All Scenes")]
     public static void BuildAllScenes()
     {
         CleanSampleScene();
+        EnsureFolder(SceneFolder.TrimEnd('/'));
         var scenePaths = new List<string> { BuildMainMenu() };
         foreach (Room room in DefineRooms()) scenePaths.Add(BuildRoom(room));
+        scenePaths.Add(BuildEnding());
         EditorBuildSettings.scenes = scenePaths.Select(p => new EditorBuildSettingsScene(p, true)).ToArray();
         EditorSceneManager.OpenScene(scenePaths[1]);
-        Debug.Log("SYSTEM-REBOOT: built " + scenePaths.Count + " scenes");
+        Debug.Log("CONVEYOR: built " + scenePaths.Count + " scenes");
     }
 
     // =====================================================================
@@ -66,7 +71,7 @@ public static class SystemRebootBuilder
     {
         var tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
         SerializedProperty tags = tagManager.FindProperty("tags");
-        foreach (string tag in new[] { "Enemy", "Terminal", "Checkpoint", "Hazard", "Boss", "DeathZone" })
+        foreach (string tag in new[] { "Enemy", "Terminal", "Relay", "Checkpoint", "Hazard", "Boss", "DeathZone" })
         {
             bool exists = false;
             for (int i = 0; i < tags.arraySize; i++) if (tags.GetArrayElementAtIndex(i).stringValue == tag) exists = true;
@@ -124,6 +129,12 @@ public static class SystemRebootBuilder
         ConfigureSprite(ArtBoss + "BossProjectile.png", Center, 1);
         foreach (var sheet in SentinelSheets) ConfigureSprite(ArtSentinel + "Sentinel_" + sheet.name + ".png", SentinelPivot, sheet.frames);
         ConfigureSprite(ArtSentinel + "Sentinel_Rocket.png", Center, 5);
+
+        // CONVEYOR placeholders (replace the PNGs with real art, keep the names)
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ConveyorBelt), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.PressHead), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.PressRod), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.Furnace), Bottom, 1);
     }
 
     static void ConfigureSprite(string path, Vector2 pivot, int frameCount)
@@ -445,7 +456,7 @@ public static class SystemRebootBuilder
     const string PlayerPrefabPath = "Assets/Prefabs/Player/Player.prefab";
     const string BugPrefabPath = "Assets/Prefabs/Enemies/VirusBug.prefab";
     const string DronePrefabPath = "Assets/Prefabs/Enemies/ScannerDrone.prefab";
-    const string TerminalPrefabPath = "Assets/Prefabs/Terminals/Terminal.prefab";
+    const string RelayPrefabPath = "Assets/Prefabs/Relays/PowerRelay.prefab";
     const string CheckpointPrefabPath = "Assets/Prefabs/Checkpoints/Checkpoint.prefab";
     const string ExitPrefabPath = "Assets/Prefabs/Checkpoints/LevelExit.prefab";
     const string BossPrefabPath = "Assets/Prefabs/Boss/Boss.prefab";
@@ -458,7 +469,7 @@ public static class SystemRebootBuilder
         CreatePlayerPrefab();
         CreateVirusBugPrefab();
         CreateDronePrefab();
-        CreateTerminalPrefab();
+        CreateRelayPrefab();
         CreateCheckpointPrefab();
         CreateExitPrefab();
         CreateProjectilePrefab();
@@ -549,11 +560,6 @@ public static class SystemRebootBuilder
         health.hurtSound = AddSound(audio, "SFX_Hurt");
         health.deathSound = AddSound(audio, "SFX_Death");
 
-        var ultimate = player.AddComponent<PlayerUltimate>();
-        ultimate.enemyLayer = 1 << EnemyLayer;
-        ultimate.chargeSound = AddSound(audio, "SFX_UltimateCharge");
-        ultimate.blastSound = AddSound(audio, "SFX_UltimateBlast");
-
         SavePrefab(player, PlayerPrefabPath);
     }
 
@@ -618,23 +624,25 @@ public static class SystemRebootBuilder
         return child.transform;
     }
 
-    static void CreateTerminalPrefab()
+    // Power relay cabinet. Art: the terminal sprites (off = dark screen, on = lit), until relay art exists.
+    static void CreateRelayPrefab()
     {
-        var terminal = new GameObject("Terminal") { tag = "Terminal" };
-        var sr = terminal.AddComponent<SpriteRenderer>();
+        EnsureFolder("Assets/Prefabs/Relays");
+        var relay = new GameObject("PowerRelay") { tag = "Relay" };
+        var sr = relay.AddComponent<SpriteRenderer>();
         sr.sprite = LoadSprite(ArtEnv + "Terminal_Off.png");
         sr.sortingOrder = SortProps;
-        var trigger = terminal.AddComponent<BoxCollider2D>();
+        var trigger = relay.AddComponent<BoxCollider2D>();
         trigger.isTrigger = true;
         trigger.size = new Vector2(2.5f, 2.5f);
         trigger.offset = new Vector2(0f, 1f);
 
-        var t = terminal.AddComponent<Terminal>();
-        t.spriteRenderer = sr;
-        t.offSprite = sr.sprite;
-        t.onSprite = LoadSprite(ArtEnv + "Terminal_On.png");
-        t.activateSound = AddSound(AddAudioRoot(terminal), "SFX_TerminalActivate");
-        SavePrefab(terminal, TerminalPrefabPath);
+        var r = relay.AddComponent<PowerRelay>();
+        r.spriteRenderer = sr;
+        r.offSprite = sr.sprite;
+        r.onSprite = LoadSprite(ArtEnv + "Terminal_On.png");
+        r.activateSound = AddSound(AddAudioRoot(relay), "SFX_TerminalActivate");
+        SavePrefab(relay, RelayPrefabPath);
     }
 
     static void CreateCheckpointPrefab()
@@ -787,12 +795,12 @@ public static class SystemRebootBuilder
     {
         RectTransform rt = NewUI(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), position, new Vector2(420f, 80f));
         var image = rt.gameObject.AddComponent<Image>();
-        image.color = new Color(0.1f, 0.35f, 0.45f, 1f);
+        image.color = new Color(0.32f, 0.22f, 0.12f, 1f);
         var button = rt.gameObject.AddComponent<Button>();
         ColorBlock colors = button.colors;
-        colors.highlightedColor = new Color(0.6f, 1f, 1f);
-        colors.selectedColor = new Color(0.6f, 1f, 1f);
-        colors.pressedColor = new Color(0.3f, 0.7f, 0.8f);
+        colors.highlightedColor = new Color(1f, 0.85f, 0.6f);
+        colors.selectedColor = new Color(1f, 0.85f, 0.6f);
+        colors.pressedColor = new Color(0.8f, 0.6f, 0.35f);
         button.colors = colors;
         Text text = NewText("Label", rt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 80f),
             label, 40, TextAnchor.MiddleCenter, Color.white);
@@ -818,18 +826,18 @@ public static class SystemRebootBuilder
         GameObject hud = NewCanvas("HUD");
         Transform root = hud.transform;
         var ui = hud.AddComponent<UIManager>();
-        Color cyan = new Color(0.45f, 0.95f, 1f);
+        Color amber = new Color(1f, 0.78f, 0.35f);
 
         ui.healthText = NewText("HealthText", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -30f), new Vector2(400f, 60f),
             "HP: 3", 48, TextAnchor.UpperLeft, Color.white);
-        ui.terminalText = NewText("TerminalText", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -95f), new Vector2(500f, 50f),
-            "TERMINALS: 0/3", 38, TextAnchor.UpperLeft, cyan);
+        ui.relayText = NewText("RelayText", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -95f), new Vector2(500f, 50f),
+            "POWER RELAYS: 0/3", 38, TextAnchor.UpperLeft, amber);
         ui.bannerText = NewText("BannerText", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -150f), new Vector2(1600f, 100f),
-            "SYSTEM REBOOT COMPLETE", 72, TextAnchor.MiddleCenter, cyan);
+            "SECTION 01", 72, TextAnchor.MiddleCenter, amber);
         ui.messageText = NewText("MessageText", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 190f), new Vector2(1600f, 60f),
             "", 34, TextAnchor.MiddleCenter, Color.white);
         ui.promptText = NewText("PromptText", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -120f), new Vector2(600f, 60f),
-            "E - REBOOT", 46, TextAnchor.MiddleCenter, new Color(1f, 0.9f, 0.3f));
+            "E - ACTIVATE RELAY", 46, TextAnchor.MiddleCenter, new Color(1f, 0.9f, 0.3f));
 
         // Boss health bar
         RectTransform bar = NewUI("BossBar", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 70f), new Vector2(1000f, 34f));
@@ -843,25 +851,7 @@ public static class SystemRebootBuilder
         ui.bossBarRoot = bar.gameObject;
         ui.bossBarFill = fill;
         ui.bossNameText = NewText("BossName", bar, new Vector2(0.5f, 1f), new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1000f, 44f),
-            "CORRUPTED CORE", 34, TextAnchor.LowerCenter, new Color(1f, 0.5f, 0.6f));
-
-        // Victory screen
-        RectTransform panel = NewUI("VictoryPanel", root, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-        panel.anchorMin = Vector2.zero;
-        panel.anchorMax = Vector2.one;
-        panel.gameObject.AddComponent<Image>().color = new Color(0.02f, 0.03f, 0.07f, 0.92f);
-        NewText("Title", panel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 260f), new Vector2(1600f, 120f),
-            "SYSTEM CLEANED", 96, TextAnchor.MiddleCenter, cyan);
-        NewText("Subtitle", panel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1600f, 60f),
-            "The infection is gone. The server is back online.", 38, TextAnchor.MiddleCenter, Color.white);
-        NewText("Thanks", panel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(1600f, 60f),
-            "Thanks for playing SYSTEM-REBOOT", 32, TextAnchor.MiddleCenter, new Color(0.7f, 0.8f, 0.9f));
-        Button menuButton = NewButton("MainMenuButton", panel, new Vector2(0f, -60f), "MAIN MENU");
-        Button quitButton = NewButton("QuitButton", panel, new Vector2(0f, -160f), "QUIT");
-        UnityEventTools.AddPersistentListener(menuButton.onClick, ui.LoadMainMenu);
-        UnityEventTools.AddPersistentListener(quitButton.onClick, ui.QuitGame);
-        ui.victoryPanel = panel.gameObject;
-        ui.victoryFirstButton = menuButton.gameObject;
+            "SUPERVISOR", 34, TextAnchor.LowerCenter, new Color(1f, 0.55f, 0.4f));
 
         SavePrefab(hud, HudPrefabPath);
     }
@@ -870,21 +860,22 @@ public static class SystemRebootBuilder
     // ROOMS
     // =====================================================================
 
-    // A room is a grid of cells: '#' solid, '=' one-way platform, '^' electric hazard, '~' corrupted hazard.
-    // Things (player spawn, enemies, terminals...) are placed on top of cells. (0,0) is the bottom-left.
+    // A section is a grid of cells: '#' solid, '=' one-way platform, '^' electric hazard, '~' corrupted hazard,
+    // 'b' conveyor belt (no tile - the ConveyorBelt object is the floor there).
+    // Things (player spawn, enemies, relays, belts, presses...) are placed on top of cells. (0,0) is the bottom-left.
     class Thing
     {
         public char kind; public int x, y, width;
+        public float value, value2;   // belt: speed / intro flag; press: interval / offset
+        public int index;             // relay number 1..3
     }
 
     class Room
     {
         public string scene, title, hint, next;
-        public int width, height, requiredTerminals;
-        // Boss arena: left/right limits of the boss movement (-1 = the whole room)
-        public int arenaMinX = 3, arenaMaxX = -1;
-        // 'X' boss is a mini-boss: it only unlocks the exit instead of ending the game
-        public bool miniBoss;
+        public int width, height, requiredRelays;
+        // The opening cutscene of the game (Section 01)
+        public bool intro;
         public Color background, tint;
         public char[,] cells;
         public List<Thing> things = new List<Thing>();
@@ -896,7 +887,7 @@ public static class SystemRebootBuilder
             this.height = height;
             cells = new char[width, height];
             Fill('.', 0, 0, width, height);
-            // Outer walls and ceiling (floors are added per room so pits are possible)
+            // Outer walls and ceiling (floors are added per section so pits are possible)
             Fill('#', 0, 0, 1, height);
             Fill('#', width - 1, 0, 1, height);
             Fill('#', 0, height - 1, width, 1);
@@ -913,8 +904,27 @@ public static class SystemRebootBuilder
         public Room Solid(int x, int y, int w, int h) { return Fill('#', x, y, w, h); }
         public Room Platform(int x, int y, int w) { return Fill('=', x, y, w, 1); }
         public Room Electric(int x, int y, int w) { return Fill('^', x, y, w, 1); }
-        public Room Corrupt(int x, int y, int w, int h) { return Fill('~', x, y, w, h); }
         public Room Add(char kind, int x, int y, int w = 1) { things.Add(new Thing { kind = kind, x = x, y = y, width = w }); return this; }
+
+        // Conveyor belt in row y from x to x+w-1. speed > 0 carries to the right.
+        public Room Belt(int x, int y, int w, float speed, bool intro = false)
+        {
+            Fill('b', x, y, w, 1);
+            things.Add(new Thing { kind = 'K', x = x, y = y, width = w, value = speed, value2 = intro ? 1f : 0f });
+            return this;
+        }
+
+        // Industrial press hanging from the ceiling above x..x+w-1. interval > 0 = slams by itself.
+        public Room Press(int x, int w, float interval = 0f, float offset = 0f, int ceilingY = -1)
+        {
+            things.Add(new Thing { kind = 'M', x = x, y = ceilingY < 0 ? height - 1 : ceilingY, width = w, value = interval, value2 = offset });
+            return this;
+        }
+
+        public Room Relay(int x, int y, int number) { things.Add(new Thing { kind = 'R', x = x, y = y, index = number }); return this; }
+        public Room Furnace(int x, int y, int w) { things.Add(new Thing { kind = 'F', x = x, y = y, width = w }); return this; }
+        // A defective unit lying on the intro belt
+        public Room Cargo(int x, int y) { return Add('U', x, y); }
 
         public char Cell(int x, int y)
         {
@@ -923,182 +933,112 @@ public static class SystemRebootBuilder
         }
     }
 
+    // Factory logs printed by the relays. The original lines of the story are kept word for word.
+    static readonly Dictionary<int, (string title, string[] lines)> RelayLogs = new Dictionary<int, (string, string[])>
+    {
+        { 1, ("RELAY 1/3 // FACTORY FLOOR", new[] {
+            "UNIT 0411: DEFECTIVE. RECYCLED.",
+            "UNIT 0410: DEFECTIVE. RECYCLED.",
+            "UNIT 0412: DEFECTIVE. ROUTED TO FURNACE.",
+            "RELAY 1/3 ACTIVE." }) },
+        { 2, ("RELAY 2/3 // STORAGE", new[] {
+            "CLIENT: NO DATA.",
+            "LAST ORDER: 14 YEARS AGO.",
+            "PRODUCTION CONTINUES.",
+            "RELAY 2/3 ACTIVE." }) },
+        { 3, ("RELAY 3/3 // POWER DISTRIBUTION", new[] {
+            "UNIT 0412: STATUS — ESCAPED.",
+            "SURFACE HATCH: READY TO OPEN.",
+            "DESTINATION: CONTROL ROOM.",
+            "RELAY 3/3 ACTIVE." }) },
+    };
+
     static List<Room> DefineRooms()
     {
         var rooms = new List<Room>();
         Room r;
 
-        // ---------------- 01 ENTRANCE: learn to move, jump, double jump, fight ----------------
-        r = new Room("Room_01_Entrance", 72, 18)
+        // ---------------- SECTION 01 - FACTORY FLOOR ----------------
+        // Unit 0412 rides the transport belt towards the furnace (left), the belt jams, the Robot escapes.
+        // First Guards, a pit, a second belt, the first relay on a raised block.
+        r = new Room("Section_01_FactoryFloor", 84, 18)
         {
-            title = "SECTOR 01 - ENTRANCE",
-            hint = "A/D: MOVE    SPACE: JUMP (PRESS AGAIN IN THE AIR TO DOUBLE JUMP)    J: ATTACK    E: INTERACT",
-            next = "Room_02_ServerHall",
-            background = new Color(0.05f, 0.07f, 0.12f), tint = new Color(0.8f, 0.9f, 1f)
+            title = "SECTION 01 // FACTORY FLOOR",
+            hint = "A/D: MOVE    SPACE: JUMP (AGAIN IN THE AIR)    J: PRESS ARM    E: INTERACT",
+            next = "Section_02_Storage", requiredRelays = 1, intro = true,
+            background = new Color(0.07f, 0.06f, 0.05f), tint = new Color(0.85f, 0.8f, 0.72f)
         };
-        r.Solid(0, 0, 24, 2).Solid(12, 2, 4, 2)          // floor + first step
-         .Solid(28, 0, 20, 2)                            // after the first pit
-         .Solid(48, 0, 6, 7)                             // tall wall: needs a double jump
-         .Solid(54, 0, 18, 2).Electric(59, 2, 3);        // first electric hazard
-        r.Add('P', 2, 2).Add('r', 5, 2).Add('r', 7, 2).Add('v', 20, 8)
-         .Add('C', 29, 2).Add('B', 40, 2).Add('r', 44, 2).Add('v', 36, 9).Add('v', 62, 9).Add('E', 69, 2);
+        r.Solid(0, 0, 36, 2).Solid(40, 0, 44, 2)          // floor, pit at x 36..39
+         .Belt(5, 1, 16, -1.2f, true)                      // transport line to the furnace
+         .Belt(44, 1, 14, 2.2f)                            // second belt, carries to the right
+         .Solid(60, 2, 6, 3);                              // raised block with relay 1
+        r.Furnace(1, 2, 4).Cargo(7, 2).Cargo(11, 2)
+         .Add('P', 17, 2).Add('B', 30, 2).Add('C', 41, 2).Add('B', 50, 2).Relay(62, 5, 1).Add('B', 72, 2)
+         .Add('r', 24, 2).Add('v', 27, 9).Add('r', 68, 2).Add('v', 55, 10).Add('r', 76, 2).Add('E', 81, 2);
         rooms.Add(r);
 
-        // ---------------- 02 SERVER HALL: pits, raised floors, first drones ----------------
-        r = new Room("Room_02_ServerHall", 92, 22)
+        // ---------------- SECTION 02 - STORAGE ----------------
+        // A low corridor with three presses (watch the shadows), scanners over the racks,
+        // a belt running against the player, and relay 2 up in the storage loft.
+        r = new Room("Section_02_Storage", 96, 22)
         {
-            title = "SECTOR 02 - SERVER HALL",
-            hint = "SCANNER DRONES DIVE AT YOU - JUMP AND STRIKE",
-            next = "Room_03_Terminal",
-            background = new Color(0.04f, 0.08f, 0.1f), tint = new Color(0.75f, 1f, 1f)
+            title = "SECTION 02 // STORAGE",
+            hint = "A SHADOW ON THE FLOOR MEANS A PRESS IS COMING DOWN",
+            next = "Section_03_Foreman", requiredRelays = 2,
+            background = new Color(0.06f, 0.06f, 0.07f), tint = new Color(0.75f, 0.77f, 0.8f)
         };
-        r.Solid(0, 0, 20, 2).Platform(21, 4, 3)
-         .Solid(25, 0, 15, 2)
-         .Solid(40, 0, 12, 5)
-         .Solid(56, 0, 14, 2).Electric(60, 2, 4).Platform(58, 4, 8)
-         .Solid(70, 0, 22, 2).Platform(74, 5, 5).Platform(81, 8, 5);
-        r.Add('P', 2, 2).Add('B', 14, 2).Add('C', 26, 2).Add('r', 28, 2).Add('r', 30, 2).Add('B', 34, 2)
-         .Add('B', 46, 5).Add('D', 54, 9).Add('C', 71, 2).Add('B', 76, 2).Add('D', 80, 12).Add('B', 85, 2)
-         .Add('r', 64, 5).Add('v', 10, 10).Add('v', 48, 12).Add('E', 89, 2);
+        r.Solid(0, 0, 96, 2)
+         .Platform(8, 5, 6).Platform(12, 8, 4)             // storage racks at the start
+         .Solid(17, 12, 19, 9)                             // low ceiling over the press corridor
+         .Belt(52, 1, 16, -2.5f)                           // belt against the player
+         .Platform(70, 5, 5).Platform(76, 8, 5).Solid(82, 11, 13, 1);   // climb to the loft
+        r.Press(19, 3, 3f, 0f, 12).Press(25, 3, 3f, 1f, 12).Press(31, 3, 3f, 2f, 12);
+        r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 10).Add('B', 48, 2).Add('D', 60, 12).Add('B', 64, 2)
+         .Add('C', 71, 2).Relay(90, 12, 2).Add('D', 86, 17)
+         .Add('r', 4, 2).Add('r', 39, 2).Add('v', 46, 16).Add('r', 84, 12).Add('E', 93, 2);
         rooms.Add(r);
 
-        // ---------------- 03 TERMINAL #1: vertical climb to the terminal ----------------
-        r = new Room("Room_03_Terminal", 60, 26)
+        // ---------------- SECTION 03 - FOREMAN (mini-boss arena) ----------------
+        // Two belts make up the floor, four presses hang from the ceiling.
+        // STAGE 1 SKELETON: the Foreman is added in the boss stage; until then the presses cycle on their own.
+        r = new Room("Section_03_Foreman", 44, 20)
         {
-            title = "SECTOR 03 - TERMINAL ALPHA",
-            hint = "CLIMB TO THE TERMINAL AND PRESS E TO REBOOT IT",
-            next = "Room_04_Corrupted", requiredTerminals = 1,
-            background = new Color(0.05f, 0.06f, 0.14f), tint = new Color(0.85f, 0.85f, 1f)
+            title = "SECTION 03 // ASSEMBLY HALL",
+            next = "Section_04_Relay",
+            background = new Color(0.1f, 0.05f, 0.03f), tint = new Color(1f, 0.8f, 0.65f)
         };
-        r.Solid(0, 0, 60, 2)
-         .Platform(9, 4, 5).Platform(16, 7, 5).Platform(9, 10, 5).Platform(16, 13, 5).Platform(23, 16, 5)
-         .Solid(29, 15, 14, 2)
-         .Electric(49, 2, 3);
-        r.Add('P', 2, 2).Add('B', 32, 2).Add('B', 45, 2).Add('C', 30, 17).Add('B', 34, 17).Add('T', 39, 17)
-         .Add('D', 36, 21).Add('D', 12, 16).Add('r', 4, 2).Add('r', 6, 2).Add('v', 50, 12).Add('E', 57, 2);
+        r.Solid(0, 0, 44, 2).Belt(2, 1, 19, 2f).Belt(23, 1, 19, -2f)
+         .Platform(5, 6, 5).Platform(34, 6, 5);
+        r.Press(11, 3, 4f, 0f).Press(17, 3, 4f, 2f).Press(23, 3, 4f, 1f).Press(29, 3, 4f, 3f);   // never above the platforms
+        r.Add('P', 1, 2).Add('v', 12, 13).Add('v', 31, 13).Add('E', 41, 2);
         rooms.Add(r);
 
-        // ---------------- 04 CORRUPTED: corrupted pools and enemy groups ----------------
-        r = new Room("Room_04_Corrupted", 100, 20)
+        // ---------------- SECTION 04 - THIRD POWER RELAY ----------------
+        // A quiet room after the Foreman: checkpoint, relay 3 on a small dais, the door to the control room.
+        r = new Room("Section_04_Relay", 52, 18)
         {
-            title = "SECTOR 04 - CORRUPTED SECTOR",
-            hint = "CORRUPTED DATA HURTS - DON'T FALL IN",
-            next = "Room_05_Ventilation",
-            background = new Color(0.1f, 0.04f, 0.1f), tint = new Color(1f, 0.75f, 1f)
+            title = "SECTION 04 // POWER DISTRIBUTION",
+            next = "Section_05_ControlRoom", requiredRelays = 3,
+            background = new Color(0.05f, 0.07f, 0.06f), tint = new Color(0.8f, 0.88f, 0.8f)
         };
-        r.Solid(1, 0, 98, 1)
-         .Solid(0, 1, 14, 1).Corrupt(14, 1, 6, 1).Solid(20, 1, 20, 1).Corrupt(40, 1, 6, 1)
-         .Solid(46, 1, 24, 1).Corrupt(70, 1, 6, 1).Solid(76, 1, 24, 1)
-         .Platform(15, 4, 4).Platform(41, 4, 4).Platform(71, 4, 4)
-         .Solid(28, 2, 2, 3)
-         .Platform(50, 5, 6).Platform(58, 8, 6);
-        r.Add('P', 2, 2).Add('B', 24, 2).Add('B', 35, 2).Add('D', 36, 9).Add('C', 47, 2).Add('B', 52, 2)
-         .Add('B', 62, 2).Add('D', 64, 12).Add('D', 82, 9).Add('B', 84, 2).Add('B', 92, 2)
-         .Add('r', 5, 2).Add('r', 22, 2).Add('v', 55, 14).Add('r', 78, 2).Add('E', 97, 2);
+        r.Solid(0, 0, 52, 2).Solid(27, 2, 7, 1).Platform(12, 5, 5);
+        r.Add('P', 2, 2).Add('C', 6, 2).Relay(30, 3, 3)
+         .Add('r', 20, 2).Add('r', 23, 2).Add('r', 37, 2).Add('r', 40, 2).Add('v', 15, 11).Add('v', 44, 10).Add('E', 49, 2);
         rooms.Add(r);
 
-        // ---------------- 05 VENTILATION: mini-boss arena, then a tall vertical shaft ----------------
-        // x 0..39 = arena of the Corrupted Core (mini-boss), x 40..79 = the shaft. The exit at the top
-        // stays locked until the mini-boss is destroyed.
-        r = new Room("Room_05_Ventilation", 80, 44)
+        // ---------------- SECTION 05 - CONTROL ROOM (final boss arena) ----------------
+        // STAGE 1 SKELETON: the Director is added in the boss stage; until then the presses cycle on their own
+        // and the surface hatch only needs the three relays.
+        r = new Room("Section_05_ControlRoom", 48, 22)
         {
-            title = "SECTOR 05 - VENTILATION SHAFT",
-            hint = "DESTROY THE GUARDIAN CORE, THEN CLIMB THE SHAFT TO THE EXIT",
-            next = "Room_06_DeepServer",
-            background = new Color(0.04f, 0.09f, 0.08f), tint = new Color(0.75f, 1f, 0.85f),
-            arenaMinX = 3, arenaMaxX = 37, miniBoss = true
+            title = "SECTION 05 // CONTROL ROOM",
+            next = "Ending_Surface", requiredRelays = 3,
+            background = new Color(0.08f, 0.03f, 0.03f), tint = new Color(0.95f, 0.75f, 0.7f)
         };
-        // Arena + wall to the shaft (open at floor level)
-        r.Solid(0, 0, 40, 2).Platform(4, 6, 5).Platform(31, 6, 5).Solid(40, 6, 1, 38);
-        // Shaft (the old room, moved 40 tiles right)
-        r.Solid(40, 0, 40, 2)
-         .Platform(48, 4, 6).Platform(57, 7, 7).Solid(68, 9, 8, 1)
-         .Platform(59, 12, 6).Platform(50, 15, 6).Solid(41, 18, 6, 1)
-         .Platform(50, 21, 6).Platform(59, 24, 7).Solid(69, 27, 10, 1).Electric(72, 28, 2)
-         .Platform(60, 30, 6).Platform(50, 33, 6).Solid(41, 36, 8, 1);
-        r.Add('P', 3, 2).Add('X', 20, 12).Add('H', 5, 2, 6).Add('H', 29, 2, 6).Add('v', 3, 12).Add('v', 36, 12)
-         .Add('C', 43, 2).Add('B', 71, 10).Add('C', 43, 19).Add('D', 52, 13).Add('D', 58, 28).Add('C', 77, 28)
-         .Add('D', 65, 36).Add('v', 45, 8).Add('v', 74, 16).Add('v', 45, 26).Add('v', 74, 35).Add('E', 44, 37);
-        rooms.Add(r);
-
-        // ---------------- 06 DEEP SERVER: long gauntlet ----------------
-        r = new Room("Room_06_DeepServer", 110, 24)
-        {
-            title = "SECTOR 06 - DEEP SERVER",
-            next = "Room_07_Terminal",
-            background = new Color(0.03f, 0.04f, 0.09f), tint = new Color(0.7f, 0.75f, 1f)
-        };
-        r.Solid(0, 0, 18, 2).Solid(22, 0, 18, 2).Solid(45, 0, 20, 2).Solid(71, 0, 39, 2)
-         .Solid(28, 2, 4, 3).Platform(41, 4, 3)
-         .Electric(50, 2, 3).Electric(56, 2, 3).Platform(49, 4, 12)
-         .Platform(66, 4, 4)
-         .Solid(75, 2, 3, 2).Solid(78, 2, 10, 4).Solid(92, 2, 8, 2);
-        r.Add('P', 2, 2).Add('r', 6, 2).Add('r', 8, 2).Add('B', 12, 2).Add('B', 25, 2).Add('B', 35, 2).Add('D', 30, 9)
-         .Add('C', 46, 2).Add('D', 55, 10).Add('B', 62, 2).Add('C', 73, 2).Add('B', 83, 6).Add('B', 96, 4)
-         .Add('D', 95, 10).Add('B', 104, 2).Add('r', 100, 2).Add('v', 20, 12).Add('v', 68, 14).Add('E', 107, 2);
-        rooms.Add(r);
-
-        // ---------------- 07 TERMINAL #2: upper chamber ----------------
-        r = new Room("Room_07_Terminal", 70, 30)
-        {
-            title = "SECTOR 07 - TERMINAL BETA",
-            hint = "THE TERMINAL IS IN THE UPPER CHAMBER",
-            next = "Room_08_Core", requiredTerminals = 2,
-            background = new Color(0.05f, 0.06f, 0.14f), tint = new Color(0.85f, 0.85f, 1f)
-        };
-        r.Solid(0, 0, 70, 2).Electric(12, 2, 3)
-         .Platform(34, 4, 5).Platform(42, 7, 5).Platform(50, 10, 5).Platform(58, 13, 5).Platform(56, 16, 4)
-         .Solid(20, 18, 36, 2);
-        r.Add('P', 2, 2).Add('B', 18, 2).Add('B', 27, 2).Add('C', 31, 2)
-         .Add('T', 24, 20).Add('B', 32, 20).Add('B', 42, 20).Add('D', 38, 25).Add('C', 53, 20)
-         .Add('D', 48, 8).Add('r', 5, 2).Add('r', 7, 2).Add('v', 62, 22).Add('E', 67, 2);
-        rooms.Add(r);
-
-        // ---------------- 08 CORE: hardest platforming before the last terminal ----------------
-        r = new Room("Room_08_Core", 100, 26)
-        {
-            title = "SECTOR 08 - SERVER CORE",
-            next = "Room_09_Terminal",
-            background = new Color(0.12f, 0.04f, 0.05f), tint = new Color(1f, 0.7f, 0.7f)
-        };
-        r.Solid(0, 0, 16, 2)
-         .Solid(16, 0, 20, 1).Corrupt(16, 1, 20, 1)
-         .Platform(18, 4, 4).Platform(24, 6, 4).Platform(30, 4, 4)
-         .Solid(36, 0, 20, 2)
-         .Platform(51, 4, 3).Solid(56, 0, 4, 9)
-         .Solid(60, 0, 40, 2).Electric(64, 2, 2).Electric(70, 2, 2).Electric(76, 2, 2);
-        r.Add('P', 2, 2).Add('D', 25, 11).Add('C', 37, 2).Add('B', 42, 2).Add('B', 50, 2).Add('D', 46, 9)
-         .Add('C', 57, 9).Add('D', 68, 9).Add('D', 78, 10).Add('B', 84, 2).Add('B', 91, 2)
-         .Add('r', 5, 2).Add('r', 40, 2).Add('v', 88, 12).Add('E', 97, 2);
-        rooms.Add(r);
-
-        // ---------------- 09 TERMINAL #3: tower climb, exit to the boss ----------------
-        r = new Room("Room_09_Terminal", 60, 34)
-        {
-            title = "SECTOR 09 - TERMINAL GAMMA",
-            hint = "REBOOT THE LAST TERMINAL TO OPEN THE CORE CHAMBER",
-            next = "Room_10_Boss", requiredTerminals = 3,
-            background = new Color(0.05f, 0.06f, 0.14f), tint = new Color(0.85f, 0.85f, 1f)
-        };
-        r.Solid(0, 0, 60, 2)
-         .Platform(8, 4, 5).Platform(16, 7, 5).Platform(24, 10, 5).Platform(16, 13, 5)
-         .Platform(8, 16, 5).Platform(16, 19, 5).Platform(24, 22, 5)
-         .Solid(30, 24, 14, 1)
-         .Electric(46, 2, 3);
-        r.Add('P', 2, 2).Add('B', 32, 2).Add('B', 42, 2).Add('D', 20, 12).Add('D', 12, 23)
-         .Add('C', 31, 25).Add('B', 35, 25).Add('T', 40, 25).Add('r', 52, 2).Add('v', 50, 16).Add('E', 57, 2);
-        rooms.Add(r);
-
-        // ---------------- 10 BOSS ARENA: the Core Sentinel (final boss) ----------------
-        r = new Room("Room_10_Boss", 48, 22)
-        {
-            title = "CORE CHAMBER",
-            hint = "JUMP OVER BEAMS, DASHES AND SHOCKWAVES - STRIKE BETWEEN ATTACKS",
-            background = new Color(0.1f, 0.02f, 0.04f), tint = new Color(1f, 0.6f, 0.65f),
-            arenaMinX = 3, arenaMaxX = 45
-        };
-        r.Solid(0, 0, 48, 2).Platform(5, 6, 6).Platform(37, 6, 6).Platform(20, 10, 8);
-        r.Add('P', 3, 2).Add('S', 32, 2).Add('r', 13, 2).Add('r', 34, 2).Add('v', 3, 12).Add('v', 44, 12).Add('v', 24, 16);
+        r.Solid(0, 0, 48, 2).Belt(3, 1, 20, 2f).Belt(25, 1, 20, -2f)
+         .Platform(6, 7, 5).Platform(37, 7, 5).Platform(20, 11, 8);
+        r.Press(12, 3, 4.5f, 0f).Press(16, 3, 4.5f, 1.5f).Press(29, 3, 4.5f, 3f).Press(33, 3, 4.5f, 0.75f);   // never above the platforms
+        r.Add('P', 1, 2).Add('E', 46, 2);
         rooms.Add(r);
 
         return rooms;
@@ -1108,7 +1048,7 @@ public static class SystemRebootBuilder
     {
         LoadTiles();
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-        string path = "Assets/Scenes/Level01/" + room.scene + ".unity";
+        string path = SceneFolder + room.scene + ".unity";
 
         // ---------- Tilemaps ----------
         var grid = new GameObject("Grid", typeof(Grid));
@@ -1147,7 +1087,7 @@ public static class SystemRebootBuilder
         hazards.gameObject.tag = "Hazard";
         hazards.gameObject.AddComponent<TilemapCollider2D>().isTrigger = true;
 
-        // Pit death zone under the room
+        // Pit death zone under the section
         var deathZone = new GameObject("DeathZone") { tag = "DeathZone" };
         deathZone.transform.position = new Vector3(room.width * 0.5f, -3f, 0f);
         var deathCollider = deathZone.AddComponent<BoxCollider2D>();
@@ -1156,14 +1096,14 @@ public static class SystemRebootBuilder
 
         // ---------- Things ----------
         var decor = new GameObject("Decor").transform;
+        var machinery = new GameObject("Machinery").transform;
         var enemies = new GameObject("Enemies").transform;
         var interactables = new GameObject("Interactables").transform;
         Transform spawn = null;
         GameObject playerObject = null;
-        GameObject bossObject = null;
-        GameObject sentinelObject = null;
-        LevelExit roomExit = null;
-        var arenaHazards = new List<GameObject>();
+        ConveyorBelt introBelt = null;
+        float furnaceX = 0f;
+        var cargo = new List<Transform>();
 
         foreach (Thing t in room.things)
         {
@@ -1182,8 +1122,15 @@ public static class SystemRebootBuilder
                 case 'D':
                     Spawn(DronePrefabPath, new Vector3(t.x + 0.5f, t.y + 0.5f, 0f), enemies);
                     break;
-                case 'T':
-                    Spawn(TerminalPrefabPath, feet, interactables);
+                case 'R':
+                    GameObject relayObject = Spawn(RelayPrefabPath, feet, interactables);
+                    relayObject.name = "PowerRelay_" + t.index;
+                    var relay = relayObject.GetComponent<PowerRelay>();
+                    if (RelayLogs.TryGetValue(t.index, out var log))
+                    {
+                        relay.logTitle = log.title;
+                        relay.logLines = log.lines;
+                    }
                     break;
                 case 'C':
                     Spawn(CheckpointPrefabPath, feet, interactables);
@@ -1192,52 +1139,29 @@ public static class SystemRebootBuilder
                     GameObject exit = Spawn(ExitPrefabPath, feet, interactables);
                     var levelExit = exit.GetComponent<LevelExit>();
                     levelExit.nextSceneName = room.next;
-                    levelExit.requiredTerminals = room.requiredTerminals;
-                    roomExit = levelExit;
+                    levelExit.requiredRelays = room.requiredRelays;
                     break;
-                case 'X':
-                    bossObject = Spawn(BossPrefabPath, new Vector3(t.x, t.y, 0f), null);
+                case 'K':
+                    ConveyorBelt belt = NewBelt(t, machinery);
+                    if (t.value2 > 0f) introBelt = belt;
                     break;
-                case 'S':
-                    sentinelObject = Spawn(SentinelPrefabPath, new Vector3(t.x + 0.5f, t.y, 0f), null);
+                case 'M':
+                    NewPress(t, machinery);
                     break;
-                case 'H':
-                    arenaHazards.Add(NewArenaHazard(t, interactables));
+                case 'F':
+                    NewFurnace(t, decor);
+                    furnaceX = t.x + t.width;
+                    break;
+                case 'U':
+                    cargo.Add(NewCargoUnit(feet, decor));
                     break;
                 case 'r':
-                    NewDecor("ServerRack", LoadSprite(ArtEnv + "ServerRack.png"), feet, decor, room.tint);
+                    NewDecor("Cabinet", LoadSprite(ArtEnv + "ServerRack.png"), feet, decor, room.tint);
                     break;
                 case 'v':
                     NewDecor("Vent", LoadSprite(ArtEnv + "Vent.png"), new Vector3(t.x + 0.5f, t.y + 0.5f, 0f), decor, room.tint);
                     break;
             }
-        }
-
-        if (bossObject != null)
-        {
-            var boss = bossObject.GetComponent<BossController>();
-            boss.hoverY = 12f;
-            boss.floorY = 2f;
-            boss.slamY = 2f + 1.4f;
-            boss.minX = room.arenaMinX;
-            boss.maxX = room.arenaMaxX > 0 ? room.arenaMaxX : room.width - 3f;
-            boss.arenaHazards = arenaHazards.ToArray();
-            if (room.miniBoss)
-            {
-                // Weaker version of the old final boss; the room exit waits for it
-                boss.isMiniBoss = true;
-                bossObject.GetComponent<EnemyHealth>().maxHealth = 16;
-                if (roomExit != null) roomExit.requiredBoss = bossObject.GetComponent<EnemyHealth>();
-            }
-        }
-
-        if (sentinelObject != null)
-        {
-            var sentinel = sentinelObject.GetComponent<SentinelBossController>();
-            sentinel.floorY = 2f;
-            sentinel.minX = room.arenaMinX;
-            sentinel.maxX = room.arenaMaxX > 0 ? room.arenaMaxX : room.width - 3f;
-            if (roomExit != null) roomExit.requiredBoss = sentinelObject.GetComponent<EnemyHealth>();
         }
 
         // ---------- Managers, camera, UI, audio ----------
@@ -1259,12 +1183,25 @@ public static class SystemRebootBuilder
 
         GameObject hud = Spawn(HudPrefabPath, Vector3.zero, null);
         var ui = hud.GetComponent<UIManager>();
-        ui.roomTitle = room.title;
-        ui.roomHint = room.hint;
+        if (room.intro)
+        {
+            // The intro shows the section title once the player gets control
+            var intro = new GameObject("IntroSequence").AddComponent<IntroSequence>();
+            intro.belt = introBelt;
+            intro.cargo = cargo.ToArray();
+            intro.furnaceX = furnaceX;
+            intro.sectionTitle = room.title;
+            intro.controlsHint = room.hint;
+        }
+        else
+        {
+            ui.roomTitle = room.title;
+            ui.roomHint = room.hint;
+        }
         NewEventSystem(null);
 
-        // Same rule as SoundGenerator.MusicForScene (only the final boss room gets the boss track)
-        NewMusic(room.scene.Contains("Boss") ? "Music_Boss" : "Music_Level");
+        // Same rule as SoundGenerator.MusicForScene
+        NewMusic(SoundGenerator.MusicForScene(path));
 
         EditorSceneManager.SaveScene(scene, path);
         return path;
@@ -1298,14 +1235,14 @@ public static class SystemRebootBuilder
         return instance;
     }
 
-    // Patrol points = how far the bug can walk on its platform (max 5 tiles each way)
+    // Patrol points = how far the Guard can walk on its platform (max 5 tiles each way)
     static void SetupPatrol(Room room, GameObject bug, int x, int y)
     {
         System.Func<int, bool> walkable = cx =>
         {
             char below = room.Cell(cx, y - 1);
             char at = room.Cell(cx, y);
-            return (below == '#' || below == '=') && at != '#' && at != '^' && at != '~';
+            return (below == '#' || below == '=' || below == 'b') && at != '#' && at != 'b' && at != '^' && at != '~';
         };
         int left = x, right = x;
         while (left - 1 >= 0 && x - (left - 1) <= 5 && walkable(left - 1)) left--;
@@ -1316,22 +1253,123 @@ public static class SystemRebootBuilder
         ai.pointB.position = new Vector3(right + 0.4f, y, 0f);
     }
 
-    static GameObject NewArenaHazard(Thing t, Transform parent)
+    // ---------- CONVEYOR machinery (art = Assets/Art/Placeholders, replaceable) ----------
+
+    static Sprite PlaceholderSprite(string name) => LoadSprite(PlaceholderArt.PathOf(name));
+
+    // 3D sound that is only heard near the object (the camera sits 10 units in front of the scene)
+    static void MakeSpatial(AudioSource source, float volume)
     {
-        var hazard = new GameObject("ArenaHazard") { tag = "Hazard" };
-        hazard.transform.SetParent(parent, false);
-        hazard.transform.position = new Vector3(t.x + t.width * 0.5f, t.y + 0.5f, 0f);
-        var sr = hazard.AddComponent<SpriteRenderer>();
-        sr.sprite = LoadSprite(ArtEnv + "Tile_Electric.png");
+        source.spatialBlend = 1f;
+        source.rolloffMode = AudioRolloffMode.Linear;
+        source.minDistance = 11f;
+        source.maxDistance = 24f;
+        source.volume = volume;
+    }
+
+    // Belt: one tile high, solid (Ground layer), the floor tiles under it stay in row y-1
+    static ConveyorBelt NewBelt(Thing t, Transform parent)
+    {
+        var go = new GameObject("ConveyorBelt") { layer = GroundLayer };
+        go.transform.SetParent(parent, false);
+        go.transform.position = new Vector3(t.x + t.width * 0.5f, t.y + 0.5f, 0f);
+        var col = go.AddComponent<BoxCollider2D>();
+        col.size = new Vector2(t.width, 1f);
+
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = PlaceholderSprite(PlaceholderArt.ConveyorBelt);
         sr.drawMode = SpriteDrawMode.Tiled;
         sr.size = new Vector2(t.width, 1f);
-        sr.sortingOrder = SortHazards;
-        var col = hazard.AddComponent<BoxCollider2D>();
+        sr.sortingOrder = SortTiles;
+
+        var belt = go.AddComponent<ConveyorBelt>();
+        belt.speed = t.value;
+        belt.length = t.width;
+        belt.beltRenderer = sr;
+        Transform audio = AddAudioRoot(go);
+        belt.humSound = AddSound(audio, "SFX_BeltHum", true);
+        MakeSpatial(belt.humSound, 0.35f);
+        belt.reverseSound = AddSound(audio, "SFX_BeltReverse");
+        MakeSpatial(belt.reverseSound, 0.8f);
+        return belt;
+    }
+
+    // Press: hangs from ceilingY (t.y) over x..x+width
+    static IndustrialPress NewPress(Thing t, Transform parent)
+    {
+        var go = new GameObject("IndustrialPress");
+        go.transform.SetParent(parent, false);
+        go.transform.position = new Vector3(t.x + t.width * 0.5f, t.y, 0f);
+
+        var press = go.AddComponent<IndustrialPress>();
+        press.width = t.width;
+        press.ceilingY = t.y;
+        press.groundLayer = 1 << GroundLayer;
+        press.autoCycle = t.value > 0f;
+        press.cycleInterval = Mathf.Max(t.value, 1f);
+        press.cycleOffset = t.value2;
+
+        Sprite headSprite = PlaceholderSprite(PlaceholderArt.PressHead);
+        press.head = NewChildSprite(go, "Head", headSprite, SortProps + 1);
+        press.head.transform.localScale = new Vector3(t.width / headSprite.bounds.size.x, press.headHeight / headSprite.bounds.size.y, 1f);
+
+        press.rod = NewChildSprite(go, "Rod", PlaceholderSprite(PlaceholderArt.PressRod), SortProps);
+        press.rod.drawMode = SpriteDrawMode.Tiled;
+        press.rod.size = new Vector2(0.5f, 1f);
+
+        press.shadow = NewChildSprite(go, "Shadow", PlaceholderSprite(PlaceholderArt.ShadowBlob), SortHazards);
+        press.lamp = NewChildSprite(go, "Lamp", PlaceholderSprite(PlaceholderArt.LampDot), SortProps + 2);
+
+        Transform audio = AddAudioRoot(go);
+        press.warningSound = AddSound(audio, "SFX_PressWarning");
+        MakeSpatial(press.warningSound, 0.6f);
+        press.impactSound = AddSound(audio, "SFX_PressImpact");
+        MakeSpatial(press.impactSound, 1f);
+        return press;
+    }
+
+    static SpriteRenderer NewChildSprite(GameObject parent, string name, Sprite sprite, int order)
+    {
+        var child = new GameObject(name);
+        child.transform.SetParent(parent.transform, false);
+        var sr = child.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingOrder = order;
+        return sr;
+    }
+
+    // Furnace mouth at the end of the transport line: glowing, flickering, burns on touch
+    static void NewFurnace(Thing t, Transform parent)
+    {
+        var go = new GameObject("Furnace");
+        go.transform.SetParent(parent, false);
+        go.transform.position = new Vector3(t.x + t.width * 0.5f, t.y, 0f);
+        Sprite sprite = PlaceholderSprite(PlaceholderArt.Furnace);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingOrder = SortDecor + 1;
+        go.transform.localScale = Vector3.one * (t.width / sprite.bounds.size.x);
+        go.AddComponent<FlickerLight>().minBrightness = 0.75f;
+
+        var heat = new GameObject("FurnaceHeat") { tag = "Hazard" };
+        heat.transform.SetParent(go.transform, true);
+        heat.transform.position = new Vector3(t.x + t.width * 0.5f, t.y + 1.25f, 0f);
+        var col = heat.AddComponent<BoxCollider2D>();
         col.isTrigger = true;
-        col.size = new Vector2(t.width, 0.45f);
-        col.offset = new Vector2(0f, -0.27f);
-        hazard.SetActive(false);
-        return hazard;
+        col.size = new Vector2(t.width / go.transform.localScale.x, 2.5f / go.transform.localScale.y);
+    }
+
+    // A dark, switched-off robot lying on the transport line (same model as Unit 0412)
+    static Transform NewCargoUnit(Vector3 feet, Transform parent)
+    {
+        var go = new GameObject("DefectiveUnit");
+        go.transform.SetParent(parent, false);
+        go.transform.position = feet;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = LoadSprite(ArtRobot + "Robot.png");
+        sr.color = new Color(0.38f, 0.36f, 0.35f);
+        sr.sortingOrder = SortEnemies - 1;
+        return go.transform;
     }
 
     static void NewDecor(string name, Sprite sprite, Vector3 position, Transform parent, Color tint)
@@ -1369,18 +1407,18 @@ public static class SystemRebootBuilder
         var cam = cameraObject.AddComponent<Camera>();
         cam.orthographic = true;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.03f, 0.04f, 0.08f);
+        cam.backgroundColor = new Color(0.06f, 0.05f, 0.04f);
         cameraObject.transform.position = new Vector3(0f, 0f, -10f);
         cameraObject.AddComponent<AudioListener>();
 
         GameObject canvas = NewCanvas("MainMenuCanvas");
         var ui = canvas.AddComponent<UIManager>();
-        Color cyan = new Color(0.45f, 0.95f, 1f);
+        Color amber = new Color(1f, 0.78f, 0.35f);
 
         NewText("Title", canvas.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 360f), new Vector2(1600f, 140f),
-            "SYSTEM-REBOOT", 120, TextAnchor.MiddleCenter, cyan);
+            "CONVEYOR", 120, TextAnchor.MiddleCenter, amber);
         NewText("Subtitle", canvas.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 270f), new Vector2(1600f, 60f),
-            "Reboot 3 terminals. Purge the infected core.", 38, TextAnchor.MiddleCenter, Color.white);
+            "UNIT 0412  //  STATUS: DEFECTIVE  //  ROUTE: FURNACE", 38, TextAnchor.MiddleCenter, Color.white);
 
         // The provided Robot artwork, shown large
         RectTransform robotImage = NewUI("RobotArt", canvas.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(320f, 320f));
@@ -1395,10 +1433,40 @@ public static class SystemRebootBuilder
         UnityEventTools.AddPersistentListener(quit.onClick, ui.QuitGame);
 
         NewText("Controls", canvas.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 50f), new Vector2(1800f, 50f),
-            "A/D MOVE   SPACE JUMP / DOUBLE JUMP   J ATTACK   E INTERACT", 30, TextAnchor.MiddleCenter, new Color(0.7f, 0.8f, 0.9f));
+            "A/D MOVE   SPACE JUMP / DOUBLE JUMP   J PRESS ARM   E INTERACT   (GAMEPAD SUPPORTED)", 30, TextAnchor.MiddleCenter, new Color(0.85f, 0.8f, 0.7f));
 
         NewEventSystem(start.gameObject);
         NewMusic("Music_Menu");
+
+        EditorSceneManager.SaveScene(scene, path);
+        return path;
+    }
+
+    // =====================================================================
+    // ENDING (the surface)
+    // =====================================================================
+
+    // The whole ending is played by EndingSequence, which builds its visuals from code
+    static string BuildEnding()
+    {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        string path = SceneFolder + "Ending_Surface.unity";
+
+        var cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
+        var cam = cameraObject.AddComponent<Camera>();
+        cam.orthographic = true;
+        cam.orthographicSize = 7f;
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = Color.black;
+        cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+        cameraObject.AddComponent<AudioListener>();
+
+        var ending = new GameObject("EndingSequence").AddComponent<EndingSequence>();
+        ending.robotSprite = LoadSprite(ArtRobot + "Robot.png");
+        ending.beltSprite = PlaceholderSprite(PlaceholderArt.ConveyorBelt);
+
+        NewEventSystem(null);
+        NewMusic(SoundGenerator.MusicForScene(path));
 
         EditorSceneManager.SaveScene(scene, path);
         return path;

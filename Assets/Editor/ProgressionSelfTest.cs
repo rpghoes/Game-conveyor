@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 
 // EDITOR-ONLY TOOL (not part of the game).
-// SYSTEM-REBOOT > Test Progression: checks the level-up rules and prints a balance table
+// CONVEYOR > Test Progression: checks the level-up rules and prints a balance table
 // (XP per level, Robot stats, and how many hits each side needs) to the Console.
 // Run it after changing ProgressionSettings to see the effect of the new numbers.
 public static class ProgressionSelfTest
@@ -12,7 +12,7 @@ public static class ProgressionSelfTest
     const int RobotHits = 3, RobotAttack = 1;
     const int BugHits = 3, MiniBossHits = 16, SentinelHits = 40;
 
-    [MenuItem("SYSTEM-REBOOT/Test Progression")]
+    [MenuItem("CONVEYOR/Test Progression")]
     public static void Run()
     {
         int failures = 0;
@@ -55,10 +55,10 @@ public static class ProgressionSelfTest
             failures += Check(PlayerProgression.Level == startLevel + 1, "one level at a time");
         }
 
-        Debug.Log("SYSTEM-REBOOT progression balance:\n" + table);
+        Debug.Log("CONVEYOR progression balance:\n" + table);
         PlayerProgression.ResetProgress();
-        if (failures == 0) Debug.Log("SYSTEM-REBOOT: progression test PASSED");
-        else Debug.LogError("SYSTEM-REBOOT: progression test FAILED (" + failures + " checks)");
+        if (failures == 0) Debug.Log("CONVEYOR: progression test PASSED");
+        else Debug.LogError("CONVEYOR: progression test FAILED (" + failures + " checks)");
     }
 
     static string Enemy(EnemyRank rank, int baseHits, int robotHit)

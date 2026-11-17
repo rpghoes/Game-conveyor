@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 // Melee attack. Press J to swing: the AttackHitbox child object is switched on for part
 // of the attack animation, and every enemy inside it is damaged and knocked back once.
@@ -48,9 +47,9 @@ public class PlayerCombat : MonoBehaviour
 
     void Update()
     {
-        if (!controller.canControl || Keyboard.current == null) return;
+        if (!controller.canControl) return;
 
-        if (Keyboard.current.jKey.wasPressedThisFrame && !IsAttacking && Time.time >= nextAttackTime)
+        if (GameInput.AttackPressed && !IsAttacking && Time.time >= nextAttackTime)
         {
             StartCoroutine(AttackRoutine());
         }

@@ -7,10 +7,10 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 
 // EDITOR-ONLY TOOL (not part of the game).
-// Synthesizes all SYSTEM-REBOOT sound effects and music as .wav files (retro chiptune style)
+// Synthesizes all CONVEYOR sound effects and music as .wav files (retro chiptune style)
 // and plugs them into the existing prefabs and scenes:
-//   SYSTEM-REBOOT > 3. Generate & Assign Sounds
-// This step does NOT rebuild rooms - it only fills the empty AudioSources, so hand-made room edits are kept.
+//   CONVEYOR > 3. Generate & Assign Sounds
+// This step does NOT rebuild rooms - it only fills the AudioSources, so hand-made section edits are kept.
 [InitializeOnLoad]
 public static class SoundGenerator
 {
@@ -46,11 +46,11 @@ public static class SoundGenerator
         "Assets/Prefabs/Enemies/ScannerDrone.prefab",
         "Assets/Prefabs/Boss/Boss.prefab",
         "Assets/Prefabs/Boss/Boss_Sentinel.prefab",
-        "Assets/Prefabs/Terminals/Terminal.prefab",
+        "Assets/Prefabs/Relays/PowerRelay.prefab",
         "Assets/Prefabs/Checkpoints/Checkpoint.prefab",
     };
 
-    [MenuItem("SYSTEM-REBOOT/3. Generate & Assign Sounds")]
+    [MenuItem("CONVEYOR/3. Generate & Assign Sounds")]
     public static void GenerateAndAssign()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -58,11 +58,11 @@ public static class SoundGenerator
         AssignToPrefabs();
         AssignToScenes();
         AssetDatabase.SaveAssets();
-        Debug.Log("SYSTEM-REBOOT: sounds generated and assigned");
+        Debug.Log("CONVEYOR: sounds generated and assigned");
     }
 
     // =====================================================================
-    // PUBLIC HELPERS (also used by SystemRebootBuilder)
+    // PUBLIC HELPERS (also used by ConveyorBuilder)
     // =====================================================================
 
     public static AudioClip LoadClip(string clipName)
@@ -81,8 +81,8 @@ public static class SoundGenerator
 
     public static string MusicForScene(string scenePath)
     {
-        if (scenePath.Contains("MainMenu")) return "Music_Menu";
-        if (scenePath.Contains("Boss")) return "Music_Boss";
+        if (scenePath.Contains("MainMenu") || scenePath.Contains("Ending")) return "Music_Menu";
+        if (scenePath.Contains("Foreman") || scenePath.Contains("ControlRoom")) return "Music_Boss";
         return "Music_Level";
     }
 
@@ -120,7 +120,7 @@ public static class SoundGenerator
     static void AssignToScenes()
     {
         string activeScene = EditorSceneManager.GetActiveScene().path;
-        string[] scenes = AssetDatabase.FindAssets("t:Scene", new[] { "Assets/Scenes/MainMenu", "Assets/Scenes/Level01" })
+        string[] scenes = AssetDatabase.FindAssets("t:Scene", new[] { "Assets/Scenes/MainMenu", "Assets/Scenes/Conveyor" })
             .Select(AssetDatabase.GUIDToAssetPath).ToArray();
 
         foreach (string path in scenes)
@@ -163,6 +163,10 @@ public static class SoundGenerator
             { "SFX_BossAttack", BossAttack },
             { "SFX_BossDeath", BossDeath },
             { "SFX_BossLaser", BossLaser },
+            { "SFX_PressWarning", PressWarning },
+            { "SFX_PressImpact", PressImpact },
+            { "SFX_BeltHum", BeltHum },
+            { "SFX_BeltReverse", BeltReverse },
         };
         var music = new Dictionary<string, System.Func<float[]>>
         {
@@ -398,6 +402,48 @@ public static class SoundGenerator
         var b = Buffer(0.25f);
         Tone(b, 0f, 0.22f, 1600f, 280f, Wave.Square, 0.45f, decay: 1.2f);
         Tone(b, 0f, 0.22f, 1610f, 285f, Wave.Saw, 0.2f, decay: 1.2f);
+        return b;
+    }
+
+    // Industrial press: two short alarm beeps before the drop
+    static float[] PressWarning()
+    {
+        var b = Buffer(0.5f);
+        Tone(b, 0f, 0.12f, 880f, 880f, Wave.Square, 0.25f, decay: 0.6f, duty: 0.5f);
+        Tone(b, 0.22f, 0.12f, 880f, 880f, Wave.Square, 0.25f, decay: 0.6f, duty: 0.5f);
+        return b;
+    }
+
+    // Industrial press: heavy metal slam with a low thud and a ringing tail
+    static float[] PressImpact()
+    {
+        var b = Buffer(0.9f);
+        Tone(b, 0f, 0.5f, 90f, 38f, Wave.Sine, 0.9f, attack: 0.002f, decay: 2.2f);
+        Noise(b, 0f, 0.35f, 0.7f, 0.5f, 0.04f, decay: 2.5f);
+        Tone(b, 0f, 0.85f, 410f, 400f, Wave.Triangle, 0.12f, decay: 3f);
+        Tone(b, 0f, 0.85f, 617f, 611f, Wave.Triangle, 0.07f, decay: 3f);
+        return b;
+    }
+
+    // Conveyor belt: a quiet, seamless mechanical rumble with a slow roller rhythm (looped)
+    static float[] BeltHum()
+    {
+        var b = Buffer(2f);
+        Noise(b, 0f, 2f, 0.25f, 0.03f, 0.03f, decay: 0f, attack: 0.001f, wrap: true);
+        for (int k = 0; k < 8; k++) Noise(b, k * 0.25f, 0.06f, 0.18f, 0.25f, 0.1f, decay: 2f, wrap: true);
+        Tone(b, 0f, 2f, 55f, 55f, Wave.Sine, 0.15f, attack: 0.001f, decay: 0f, wrap: true);
+        LowPass(b, 0.35f);
+        return b;
+    }
+
+    // Conveyor belt changes direction: clunk + motor whine going down and up
+    static float[] BeltReverse()
+    {
+        var b = Buffer(0.8f);
+        Noise(b, 0f, 0.12f, 0.6f, 0.4f, 0.1f, decay: 2f);
+        Tone(b, 0f, 0.35f, 300f, 90f, Wave.Saw, 0.25f, decay: 1f);
+        Tone(b, 0.35f, 0.4f, 90f, 300f, Wave.Saw, 0.25f, attack: 0.05f, decay: 1.2f);
+        Crush(b, 12);
         return b;
     }
 

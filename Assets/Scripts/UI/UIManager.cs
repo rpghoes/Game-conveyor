@@ -1,9 +1,8 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-// Controls the HUD (HP, terminals, ultimate meter, messages, screen flash, boss bar, victory screen)
+// Controls the HUD (HP, relay counter, messages, factory log window, screen flash, boss bar)
 // and the main menu buttons. One per scene.
 public class UIManager : MonoBehaviour
 {
@@ -11,12 +10,12 @@ public class UIManager : MonoBehaviour
 
     [Header("HUD Text")]
     public Text healthText;
-    public Text terminalText;
+    public Text relayText;
     [Tooltip("Small messages at the bottom of the screen")]
     public Text messageText;
-    [Tooltip("Interaction hint, e.g. 'E - REBOOT'")]
+    [Tooltip("Interaction hint, e.g. 'E - ACTIVATE RELAY'")]
     public Text promptText;
-    [Tooltip("Big text at the top: room names, SYSTEM REBOOT COMPLETE, SYSTEM CLEANED")]
+    [Tooltip("Big text at the top: section names, boss lines")]
     public Text bannerText;
 
     [Header("Boss Health Bar")]
@@ -25,82 +24,57 @@ public class UIManager : MonoBehaviour
     public RectTransform bossBarFill;
     public Text bossNameText;
 
-    [Header("Victory Screen")]
-    public GameObject victoryPanel;
-    public GameObject victoryFirstButton;
-    public float victoryDelay = 3f;
-
-    [Header("Room Intro")]
+    [Header("Section Intro")]
     public string roomTitle;
     [TextArea] public string roomHint;
 
     [Header("Scene Names")]
-    public string firstRoomScene = "Room_01_Entrance";
+    public string firstRoomScene = "Section_01_FactoryFloor";
     public string mainMenuScene = "MainMenu";
+
+    static readonly Color Amber = new Color(1f, 0.78f, 0.35f);
+    static readonly Color LogGreen = new Color(0.55f, 1f, 0.6f);
 
     private Coroutine messageRoutine;
     private Coroutine bannerRoutine;
     private Coroutine flashRoutine;
+    private Coroutine logRoutine;
     private Image flashImage;
-    private RectTransform ultimateFill;
-    private Image ultimateFillImage;
-    private Text ultimateLabel;
-    private bool ultimateReady;
     private RectTransform healthCellRoot;
     private Image[] healthCells;
     private Image[] healthCellFrames;
-    private int shownMaxHealth;
-    // Level / XP panel
-    private RectTransform xpPanel;
-    private Text levelLabel;
-    private Text xpLabel;
-    private RectTransform xpFill;
-    private Image xpFillImage;
-    private float shownXpProgress;
-    private float xpFlashUntil;
-    private Text levelUpTitle;
-    private Text levelUpDetails;
-    private Coroutine levelUpRoutine;
     private float[] lostCellFlashUntil;
     private Text healthNumber;
     private int shownHealth;
     private Text bossHealthNumber;
+    // Factory log window
+    private RectTransform logPanel;
+    private Text logTitleLabel;
+    private Text logBody;
+
+    // True while the factory log window is printing or on screen
+    public bool IsLogOpen => logPanel != null && logPanel.gameObject.activeSelf;
 
     void Awake()
     {
         Instance = this;
     }
 
-    void OnEnable()
-    {
-        PlayerProgression.XpChanged += OnXpChanged;
-        PlayerProgression.LeveledUp += OnLeveledUp;
-    }
-
-    void OnDisable()
-    {
-        PlayerProgression.XpChanged -= OnXpChanged;
-        PlayerProgression.LeveledUp -= OnLeveledUp;
-    }
-
     void Start()
     {
-        UpdateTerminals(TerminalManager.ActivatedCount, TerminalManager.TotalTerminals);
+        UpdateRelays(RelayManager.ActivatedCount, RelayManager.TotalRelays);
         SetVisible(messageText, false);
         SetVisible(promptText, false);
         SetVisible(bannerText, false);
         if (bossBarRoot != null) bossBarRoot.SetActive(false);
-        if (victoryPanel != null) victoryPanel.SetActive(false);
-        // Only the in-game HUD (it has the HP label) shows the level panel, not the main menu
-        if (healthText != null)
-        {
-            BuildXpPanel();
-            shownXpProgress = PlayerProgression.XpProgress;
-            RefreshXpPanel();
-        }
 
         if (!string.IsNullOrEmpty(roomTitle)) ShowBanner(roomTitle, 2.5f);
         if (!string.IsNullOrEmpty(roomHint)) ShowMessage(roomHint, 6f);
+    }
+
+    void Update()
+    {
+        RefreshHealthCells();
     }
 
     // ---------------- HUD ----------------
@@ -118,7 +92,6 @@ public class UIManager : MonoBehaviour
             if (current < cellTop && shownHealth > i * hit && current < shownHealth) lostCellFlashUntil[i] = Time.unscaledTime + 0.35f;
         }
         shownHealth = current;
-        shownMaxHealth = max;
         if (healthNumber != null) healthNumber.text = current + "/" + max;
         RefreshHealthCells();
     }
@@ -144,7 +117,7 @@ public class UIManager : MonoBehaviour
             frame.anchoredPosition = new Vector2(i * 58f, 0f);
             frame.sizeDelta = new Vector2(50f, 36f);
             healthCellFrames[i] = frame.gameObject.AddComponent<Image>();
-            healthCellFrames[i].color = new Color(0.02f, 0.04f, 0.06f, 0.9f);
+            healthCellFrames[i].color = new Color(0.06f, 0.05f, 0.04f, 0.9f);
 
             RectTransform fill = NewUI("Fill", frame);
             fill.anchorMin = Vector2.zero;
@@ -161,9 +134,7 @@ public class UIManager : MonoBehaviour
         numberRect.anchoredPosition = new Vector2(max * 58f + 8f, 2f);
         numberRect.sizeDelta = new Vector2(200f, 40f);
         healthNumber = NewLabel(numberRect, 30, TextAnchor.MiddleLeft);
-        healthNumber.color = new Color(0.8f, 0.9f, 1f);
-
-        if (victoryPanel != null) victoryPanel.transform.SetAsLastSibling();
+        healthNumber.color = new Color(0.9f, 0.88f, 0.8f);
     }
 
     void RefreshHealthCells()
@@ -179,8 +150,8 @@ public class UIManager : MonoBehaviour
             // The fill shrinks from the right; the cell frame behind it shows the lost part
             healthCells[i].rectTransform.offsetMax = new Vector2(-4f - 42f * (1f - part), -4f);
             healthCells[i].enabled = part > 0f;
-            healthCellFrames[i].color = Time.unscaledTime < lostCellFlashUntil[i] ? Color.white : new Color(0.02f, 0.04f, 0.06f, 0.9f);
-            healthCells[i].color = critical ? Color.Lerp(new Color(1f, 0.25f, 0.25f), new Color(1f, 0.7f, 0.6f), pulse) : new Color(0.45f, 0.95f, 1f);
+            healthCellFrames[i].color = Time.unscaledTime < lostCellFlashUntil[i] ? Color.white : new Color(0.06f, 0.05f, 0.04f, 0.9f);
+            healthCells[i].color = critical ? Color.Lerp(new Color(1f, 0.25f, 0.25f), new Color(1f, 0.7f, 0.6f), pulse) : Amber;
         }
     }
 
@@ -198,9 +169,9 @@ public class UIManager : MonoBehaviour
         return label;
     }
 
-    public void UpdateTerminals(int count, int total)
+    public void UpdateRelays(int count, int total)
     {
-        if (terminalText != null) terminalText.text = "TERMINALS: " + count + "/" + total;
+        if (relayText != null) relayText.text = "POWER RELAYS: " + count + "/" + total;
     }
 
     public void ShowMessage(string text, float duration = 2f)
@@ -230,13 +201,7 @@ public class UIManager : MonoBehaviour
         SetVisible(promptText, false);
     }
 
-    public void ShowRebootComplete()
-    {
-        ShowBanner("SYSTEM REBOOT COMPLETE", 4f);
-        ShowMessage("THE SERVER CORE IS NOW ACCESSIBLE", 4f);
-    }
-
-    // Full-screen colour flash that fades out (damage, ultimate, boss death)
+    // Full-screen colour flash that fades out (damage, relay surge, boss death)
     public void Flash(Color color, float duration)
     {
         if (flashImage == null)
@@ -266,215 +231,79 @@ public class UIManager : MonoBehaviour
         flashImage.gameObject.SetActive(false);
     }
 
-    // Ultimate meter under the terminal counter. normalized = 0..1
-    public void UpdateUltimate(float normalized, bool ready)
+    // ---------------- Factory log (relay terminals) ----------------
+
+    // A terminal window on the right side of the screen. Lines are typed out one by one,
+    // the window stays for a few seconds and then closes by itself. The game keeps running.
+    public void ShowTerminalLog(string title, string[] lines, float holdTime = 4f)
     {
-        if (ultimateFill == null) BuildUltimateMeter();
-        ultimateFill.anchorMax = new Vector2(Mathf.Clamp01(normalized), 1f);
-        ultimateReady = ready;
-        ultimateLabel.text = ready ? "ULTIMATE READY - K" : "ULTIMATE";
-        if (!ready)
+        if (logPanel == null) BuildLogPanel();
+        if (logRoutine != null) StopCoroutine(logRoutine);
+        logRoutine = StartCoroutine(TerminalLogRoutine(title, lines ?? new string[0], holdTime));
+    }
+
+    void BuildLogPanel()
+    {
+        logPanel = NewUI("FactoryLog", transform);
+        logPanel.anchorMin = logPanel.anchorMax = new Vector2(1f, 1f);
+        logPanel.pivot = new Vector2(1f, 1f);
+        logPanel.anchoredPosition = new Vector2(-40f, -40f);
+        logPanel.sizeDelta = new Vector2(760f, 300f);
+        var bg = logPanel.gameObject.AddComponent<Image>();
+        bg.color = new Color(0.02f, 0.05f, 0.03f, 0.88f);
+        bg.raycastTarget = false;
+        logPanel.gameObject.AddComponent<Outline>().effectColor = new Color(0.3f, 0.8f, 0.4f, 0.6f);
+
+        RectTransform titleRect = NewUI("Title", logPanel);
+        titleRect.anchorMin = titleRect.anchorMax = new Vector2(0f, 1f);
+        titleRect.pivot = new Vector2(0f, 1f);
+        titleRect.anchoredPosition = new Vector2(20f, -14f);
+        titleRect.sizeDelta = new Vector2(720f, 40f);
+        logTitleLabel = NewLabel(titleRect, 28, TextAnchor.UpperLeft);
+        logTitleLabel.color = Amber;
+
+        RectTransform bodyRect = NewUI("Body", logPanel);
+        bodyRect.anchorMin = bodyRect.anchorMax = new Vector2(0f, 1f);
+        bodyRect.pivot = new Vector2(0f, 1f);
+        bodyRect.anchoredPosition = new Vector2(20f, -60f);
+        bodyRect.sizeDelta = new Vector2(720f, 230f);
+        logBody = NewLabel(bodyRect, 26, TextAnchor.UpperLeft);
+        logBody.color = LogGreen;
+        logBody.lineSpacing = 1.15f;
+        logPanel.gameObject.SetActive(false);
+    }
+
+    IEnumerator TerminalLogRoutine(string title, string[] lines, float holdTime)
+    {
+        logPanel.gameObject.SetActive(true);
+        logPanel.SetAsLastSibling();
+        logTitleLabel.text = title;
+        var shown = new System.Text.StringBuilder();
+        logBody.text = "";
+
+        foreach (string line in lines)
         {
-            ultimateFillImage.color = new Color(0.3f, 0.75f, 0.85f);
-            ultimateLabel.color = new Color(0.6f, 0.75f, 0.85f);
+            yield return new WaitForSeconds(0.25f);
+            string prefix = "> ";
+            for (int i = 0; i <= line.Length; i++)
+            {
+                logBody.text = shown + prefix + line.Substring(0, i) + "_";
+                yield return new WaitForSeconds(0.025f);
+            }
+            shown.Append(prefix).Append(line).Append('\n');
+            logBody.text = shown.ToString();
         }
-    }
 
-    void Update()
-    {
-        RefreshHealthCells();
-        AnimateXpBar();
-
-        // Pulse the meter while the ultimate is ready
-        if (!ultimateReady || ultimateFillImage == null) return;
-        float pulse = Mathf.PingPong(Time.unscaledTime * 3f, 1f);
-        ultimateFillImage.color = Color.Lerp(new Color(0.45f, 0.95f, 1f), Color.white, pulse);
-        ultimateLabel.color = Color.Lerp(new Color(1f, 0.9f, 0.3f), Color.white, pulse);
-    }
-
-    void BuildUltimateMeter()
-    {
-        RectTransform bar = NewUI("UltimateBar", transform);
-        bar.anchorMin = bar.anchorMax = new Vector2(0f, 1f);
-        bar.pivot = new Vector2(0f, 1f);
-        bar.anchoredPosition = new Vector2(40f, -160f);
-        bar.sizeDelta = new Vector2(320f, 22f);
-        bar.gameObject.AddComponent<Image>().color = new Color(0.05f, 0.1f, 0.14f, 0.9f);
-
-        ultimateFill = NewUI("Fill", bar);
-        ultimateFill.anchorMin = Vector2.zero;
-        ultimateFill.anchorMax = new Vector2(0f, 1f);
-        ultimateFill.offsetMin = new Vector2(3f, 3f);
-        ultimateFill.offsetMax = new Vector2(-3f, -3f);
-        ultimateFillImage = ultimateFill.gameObject.AddComponent<Image>();
-
-        RectTransform labelRect = NewUI("Label", bar);
-        labelRect.anchorMin = labelRect.anchorMax = new Vector2(0f, 0.5f);
-        labelRect.pivot = new Vector2(0f, 0.5f);
-        labelRect.anchoredPosition = new Vector2(335f, 0f);
-        labelRect.sizeDelta = new Vector2(500f, 40f);
-        ultimateLabel = labelRect.gameObject.AddComponent<Text>();
-        ultimateLabel.font = terminalText != null ? terminalText.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        ultimateLabel.fontSize = 28;
-        ultimateLabel.fontStyle = FontStyle.Bold;
-        ultimateLabel.alignment = TextAnchor.MiddleLeft;
-        ultimateLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-        ultimateLabel.raycastTarget = false;
-        labelRect.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
-
-        // Keep the victory screen on top of the meter
-        if (victoryPanel != null) victoryPanel.transform.SetAsLastSibling();
-    }
-
-    // ---------------- Level / XP ----------------
-
-    //   PLAYER LEVEL: 5
-    //   [████████░░] XP 120 / 180  67%
-    void BuildXpPanel()
-    {
-        Color gold = DamageNumber.LevelUpColor;
-        xpPanel = NewUI("LevelPanel", transform);
-        xpPanel.anchorMin = xpPanel.anchorMax = new Vector2(0f, 1f);
-        xpPanel.pivot = new Vector2(0f, 1f);
-        xpPanel.anchoredPosition = new Vector2(40f, -195f);
-        xpPanel.sizeDelta = new Vector2(700f, 80f);
-
-        RectTransform levelRect = NewUI("Level", xpPanel);
-        levelRect.anchorMin = levelRect.anchorMax = new Vector2(0f, 1f);
-        levelRect.pivot = new Vector2(0f, 1f);
-        levelRect.anchoredPosition = Vector2.zero;
-        levelRect.sizeDelta = new Vector2(500f, 40f);
-        levelLabel = NewLabel(levelRect, 32, TextAnchor.MiddleLeft);
-        levelLabel.color = gold;
-
-        RectTransform bar = NewUI("XpBar", xpPanel);
-        bar.anchorMin = bar.anchorMax = new Vector2(0f, 1f);
-        bar.pivot = new Vector2(0f, 1f);
-        bar.anchoredPosition = new Vector2(0f, -46f);
-        bar.sizeDelta = new Vector2(320f, 20f);
-        bar.gameObject.AddComponent<Image>().color = new Color(0.08f, 0.07f, 0.03f, 0.9f);
-
-        xpFill = NewUI("Fill", bar);
-        xpFill.anchorMin = Vector2.zero;
-        xpFill.anchorMax = new Vector2(0f, 1f);
-        xpFill.offsetMin = new Vector2(3f, 3f);
-        xpFill.offsetMax = new Vector2(-3f, -3f);
-        xpFillImage = xpFill.gameObject.AddComponent<Image>();
-        xpFillImage.color = gold;
-        xpFillImage.raycastTarget = false;
-
-        RectTransform xpRect = NewUI("Xp", xpPanel);
-        xpRect.anchorMin = xpRect.anchorMax = new Vector2(0f, 1f);
-        xpRect.pivot = new Vector2(0f, 1f);
-        xpRect.anchoredPosition = new Vector2(335f, -36f);
-        xpRect.sizeDelta = new Vector2(400f, 40f);
-        xpLabel = NewLabel(xpRect, 26, TextAnchor.MiddleLeft);
-        xpLabel.color = new Color(0.95f, 0.9f, 0.7f);
-
-        if (victoryPanel != null) victoryPanel.transform.SetAsLastSibling();
-    }
-
-    void RefreshXpPanel()
-    {
-        if (levelLabel == null) return;
-        levelLabel.text = "PLAYER LEVEL: " + PlayerProgression.Level;
-        if (PlayerProgression.IsMaxLevel)
-        {
-            xpLabel.text = "XP MAX";
-            return;
-        }
-        int percent = Mathf.FloorToInt(PlayerProgression.XpProgress * 100f);
-        xpLabel.text = "XP: " + PlayerProgression.Xp + " / " + PlayerProgression.XpToNextLevel + "   " + percent + "%";
-    }
-
-    void OnXpChanged(int gained)
-    {
-        xpFlashUntil = Time.unscaledTime + 0.25f;
-        RefreshXpPanel();
-    }
-
-    // The bar slides towards the real value; after a level up it fills to the end first, then restarts
-    void AnimateXpBar()
-    {
-        if (xpFill == null) return;
-        float target = PlayerProgression.XpProgress;
-        if (target < shownXpProgress - 0.001f)
-        {
-            shownXpProgress = Mathf.MoveTowards(shownXpProgress, 1f, Time.unscaledDeltaTime * 3f);
-            if (shownXpProgress >= 1f) shownXpProgress = 0f;
-        }
-        else shownXpProgress = Mathf.MoveTowards(shownXpProgress, target, Time.unscaledDeltaTime * 1.5f);
-
-        xpFill.anchorMax = new Vector2(Mathf.Clamp01(shownXpProgress), 1f);
-        bool flash = Time.unscaledTime < xpFlashUntil;
-        xpFillImage.color = flash ? Color.white : DamageNumber.LevelUpColor;
-    }
-
-    void OnLeveledUp(int level)
-    {
-        RefreshXpPanel();
-        if (levelLabel == null) return;
-        if (levelUpRoutine != null) StopCoroutine(levelUpRoutine);
-        levelUpRoutine = StartCoroutine(LevelUpRoutine(level));
-    }
-
-    // Big "LEVEL UP!" that pops in, glows and fades, with the new stats under it
-    IEnumerator LevelUpRoutine(int level)
-    {
-        Color gold = DamageNumber.LevelUpColor;
-        if (levelUpTitle == null)
-        {
-            RectTransform titleRect = NewUI("LevelUpTitle", transform);
-            titleRect.anchorMin = titleRect.anchorMax = new Vector2(0.5f, 0.5f);
-            titleRect.anchoredPosition = new Vector2(0f, 150f);
-            titleRect.sizeDelta = new Vector2(1400f, 160f);
-            levelUpTitle = NewLabel(titleRect, 110, TextAnchor.MiddleCenter);
-
-            RectTransform detailRect = NewUI("LevelUpDetails", transform);
-            detailRect.anchorMin = detailRect.anchorMax = new Vector2(0.5f, 0.5f);
-            detailRect.anchoredPosition = new Vector2(0f, 60f);
-            detailRect.sizeDelta = new Vector2(1600f, 60f);
-            levelUpDetails = NewLabel(detailRect, 34, TextAnchor.MiddleCenter);
-        }
-        if (victoryPanel != null) victoryPanel.transform.SetAsLastSibling();
-
-        ProgressionSettings s = PlayerProgression.Settings;
-        levelUpTitle.text = "LEVEL UP!";
-        levelUpDetails.text = "LEVEL " + level + "   HP +" + s.healthPerLevel + "   DMG +" + Mathf.RoundToInt(s.damagePerLevel * 100f) +
-            "%   DEF " + Mathf.RoundToInt(PlayerProgression.PlayerDefense * 100f) + "%   REGEN " + PlayerProgression.PlayerRegen.ToString("0.0") + "/s";
-        levelUpTitle.gameObject.SetActive(true);
-        levelUpDetails.gameObject.SetActive(true);
-        Flash(new Color(gold.r, gold.g, gold.b, 0.35f), 0.5f);
-
-        const float duration = 2.4f;
+        // Blinking cursor while the window stays open
         float timer = 0f;
-        while (timer < duration)
+        while (timer < holdTime)
         {
-            timer += Time.unscaledDeltaTime;
-            // Pop in with an overshoot, then a gentle pulse, then fade out
-            float pop = timer < 0.25f ? Mathf.Lerp(2.2f, 0.9f, timer / 0.25f) : (timer < 0.4f ? Mathf.Lerp(0.9f, 1f, (timer - 0.25f) / 0.15f) : 1f + Mathf.Sin(timer * 8f) * 0.03f);
-            float alpha = timer < duration - 0.5f ? 1f : (duration - timer) / 0.5f;
-            Color glow = Color.Lerp(Color.white, gold, Mathf.Clamp01(timer / 0.3f));
-            levelUpTitle.rectTransform.localScale = Vector3.one * pop;
-            levelUpTitle.color = new Color(glow.r, glow.g, glow.b, alpha);
-            levelUpDetails.color = new Color(1f, 1f, 1f, alpha * Mathf.Clamp01((timer - 0.2f) * 4f));
-            // The level label in the corner pulses too
-            levelLabel.rectTransform.localScale = Vector3.one * (1f + 0.25f * Mathf.Max(0f, 1f - timer / 0.6f));
-            levelLabel.color = Color.Lerp(gold, Color.white, Mathf.PingPong(timer * 4f, 1f) * Mathf.Max(0f, 1f - timer / 1.2f));
+            timer += Time.deltaTime;
+            logBody.text = shown + (Mathf.FloorToInt(timer * 3f) % 2 == 0 ? "> _" : "> ");
             yield return null;
         }
-        levelUpTitle.gameObject.SetActive(false);
-        levelUpDetails.gameObject.SetActive(false);
-        levelLabel.rectTransform.localScale = Vector3.one;
-        levelLabel.color = gold;
-        levelUpRoutine = null;
-    }
-
-    static RectTransform NewUI(string name, Transform parent)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        return (RectTransform)go.transform;
+        logPanel.gameObject.SetActive(false);
+        logRoutine = null;
     }
 
     // ---------------- Boss ----------------
@@ -508,38 +337,17 @@ public class UIManager : MonoBehaviour
         bossHealthNumber.text = current + " / " + max;
     }
 
-    public void ShowBossDefeated()
+    public void HideBossBar()
     {
         SetBossHealth(0f);
         if (bossBarRoot != null) bossBarRoot.SetActive(false);
-        ShowBanner("SYSTEM CLEANED", 0f);
-        StartCoroutine(ShowVictoryAfterDelay());
     }
 
-    // Mini-boss: no victory screen, the room exit just opens
-    public void ShowMiniBossDefeated()
-    {
-        SetBossHealth(0f);
-        if (bossBarRoot != null) bossBarRoot.SetActive(false);
-        ShowBanner("THREAT PURGED", 3f);
-        ShowMessage("THE EXIT IS UNLOCKED", 4f);
-    }
-
-    IEnumerator ShowVictoryAfterDelay()
-    {
-        yield return new WaitForSeconds(victoryDelay);
-        if (victoryPanel != null) victoryPanel.SetActive(true);
-        if (victoryFirstButton != null && EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(victoryFirstButton);
-        }
-    }
-
-    // ---------------- Buttons (Main Menu / Victory) ----------------
+    // ---------------- Buttons (Main Menu) ----------------
 
     public void StartGame()
     {
-        TerminalManager.ResetProgress();
+        RelayManager.ResetProgress();
         PlayerProgression.ResetProgress();
         LoadingScreen.Load(firstRoomScene);
     }
@@ -558,6 +366,13 @@ public class UIManager : MonoBehaviour
     }
 
     // ---------------- Helpers ----------------
+
+    static RectTransform NewUI(string name, Transform parent)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        return (RectTransform)go.transform;
+    }
 
     IEnumerator ShowTextFor(Text label, string text, float duration)
     {

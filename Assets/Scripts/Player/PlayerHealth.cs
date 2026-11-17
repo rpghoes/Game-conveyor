@@ -34,7 +34,7 @@ public class PlayerHealth : MonoBehaviour
     // Real max HP for the current level
     public int MaxHealth { get; private set; }
     public bool IsDead { get; private set; }
-    // PlayerUltimate switches this on while the shockwave is charging
+    // Cutscenes switch this on so nothing can hurt the Robot
     [HideInInspector] public bool invulnerable;
 
     private PlayerController controller;
