@@ -1,53 +1,52 @@
 using System.Collections;
 using UnityEngine;
 
-// Ground enemy. Patrols between two points, chases the player when close, and picks
-// one of three attacks. Each one has a clear warning (flash colour + pose):
-//   BITE   - close range, short wind-up, then a snap in front of it
-//   POUNCE - mid range, crouches (orange) and leaps at the player in an arc
-//   RUSH   - mid range, shakes (red) and charges along the floor, then is dizzy for a moment
+// Factory Guard. It does not hate the Robot - it handles defective equipment.
+// Patrols back and forth (also along conveyor belts, which carry it), stops at platform edges and
+// looks around before turning. When it notices the Robot it freezes for a moment ("!") and then:
+//   STRIKE - close range: raises the baton (yellow flash), then a short hit in front of it
+//   RUSH   - mid range on the same floor: shakes (red), charges, then is dizzy for a moment (hit it then)
+// The Robot's press arm knocks it back. A Scanner alarm (Alert) sends it towards the Robot even from afar.
 // No pathfinding.
 [RequireComponent(typeof(Rigidbody2D), typeof(EnemyHealth))]
-public class VirusBugAI : MonoBehaviour
+public class GuardAI : MonoBehaviour
 {
     [Header("Patrol")]
-    [Tooltip("The bug walks back and forth between these two points")]
+    [Tooltip("The Guard walks back and forth between these two points")]
     public Transform pointA;
     public Transform pointB;
     public float patrolSpeed = 2f;
+    [Tooltip("Pause at the end of the route / at an edge before turning around")]
+    public float turnPause = 0.6f;
 
     [Header("Chase")]
     public float detectionRange = 7f;
     [Tooltip("Ignore the player if they are this much higher or lower")]
     public float maxHeightDifference = 2.5f;
-    public float chaseSpeed = 4f;
+    public float chaseSpeed = 3.8f;
+    [Tooltip("Freeze this long when the Robot is first noticed")]
+    public float noticeTime = 0.35f;
+    [Tooltip("After an alarm the Guard hunts the Robot this long, wherever it is")]
+    public float alertDuration = 8f;
 
-    [Header("Bite")]
+    [Header("Strike")]
     public float attackRange = 1.3f;
-    [Tooltip("Pause before the bite lands, so the player can react")]
-    public float attackWindup = 0.3f;
+    [Tooltip("Pause before the strike lands, so the player can react")]
+    public float attackWindup = 0.35f;
     public float attackCooldown = 1.2f;
     public int damage = 1;
-
-    [Header("Pounce")]
-    [Tooltip("Pounce when the player is between these distances")]
-    public Vector2 pounceRange = new Vector2(2.5f, 5.5f);
-    public float pounceWindup = 0.45f;
-    public float pounceJumpSpeed = 10f;
-    public float pounceCooldown = 3.5f;
 
     [Header("Rush")]
     public Vector2 rushRange = new Vector2(3f, 7f);
     public float rushWindup = 0.55f;
-    public float rushSpeed = 11f;
+    public float rushSpeed = 10f;
     public float rushDuration = 0.7f;
     [Tooltip("Dizzy time after a rush - a good moment to hit it")]
-    public float rushRecovery = 0.7f;
+    public float rushRecovery = 0.8f;
     public float rushCooldown = 4f;
 
     [Header("Telegraph Colours")]
-    public Color biteColor = new Color(1f, 0.85f, 0.4f);
-    public Color pounceColor = new Color(1f, 0.6f, 0.2f);
+    public Color strikeColor = new Color(1f, 0.85f, 0.4f);
     public Color rushColor = new Color(1f, 0.3f, 0.3f);
 
     [Header("Ground Sensing")]
@@ -56,13 +55,14 @@ public class VirusBugAI : MonoBehaviour
     public float lookAheadDistance = 0.8f;
 
     [Header("Art")]
-    [Tooltip("The provided Virus Bug artwork faces LEFT")]
-    public bool artFacesRight = false;
+    [Tooltip("Does the Guard artwork face right?")]
+    public bool artFacesRight = true;
 
     [Header("Audio")]
     public AudioSource attackSound;
+    public AudioSource noticeSound;
 
-    enum Pattern { None, Bite, Pounce, Rush }
+    enum Pattern { None, Strike, Rush }
 
     private Rigidbody2D rb;
     private EnemyHealth health;
@@ -73,14 +73,16 @@ public class VirusBugAI : MonoBehaviour
     private float leftX, rightX;
     private int moveDirection = 1;
     private bool attacking;
+    private bool noticedPlayer;
     private float nextAttackTime;
-    private float nextPounceTime;
     private float nextRushTime;
-    private Pattern lastSpecial = Pattern.None;
+    private float alertedUntil;
+    private float pausedUntil;
     private Vector3 baseScale;
 
     Vector2 PlayerChest => (Vector2)player.position + Vector2.up * 0.8f;
-    Vector2 BodyCenter => (Vector2)transform.position + Vector2.up * 0.5f;
+    Vector2 BodyCenter => (Vector2)transform.position + Vector2.up * 0.8f;
+    public bool IsAlerted => Time.time < alertedUntil;
 
     void Start()
     {
@@ -89,6 +91,7 @@ public class VirusBugAI : MonoBehaviour
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         baseScale = new Vector3(Mathf.Abs(transform.localScale.x), transform.localScale.y, transform.localScale.z);
+        if (groundLayer == 0) groundLayer = LayerMask.GetMask("Ground");
 
         // Remember the patrol limits in world space (the points are children and would move with us)
         if (pointA != null && pointB != null)
@@ -102,8 +105,7 @@ public class VirusBugAI : MonoBehaviour
             rightX = transform.position.x + 3f;
         }
 
-        // Stagger the first special attacks so a group doesn't attack in sync
-        nextPounceTime = Time.time + Random.Range(0.5f, 2f);
+        // Stagger the first rush so a group doesn't attack in sync
         nextRushTime = Time.time + Random.Range(1f, 3f);
 
         GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
@@ -116,7 +118,7 @@ public class VirusBugAI : MonoBehaviour
         ApplyLevelScaling();
     }
 
-    // A higher-level Robot meets faster, more aggressive bugs. Wind-ups shrink only half as much
+    // Stronger Guards for a stronger Robot (ProgressionSettings tiers). Wind-ups shrink only half as much
     // as cooldowns so every attack still has a readable warning.
     void ApplyLevelScaling()
     {
@@ -125,26 +127,39 @@ public class VirusBugAI : MonoBehaviour
         chaseSpeed *= s.moveSpeed;
         rushSpeed *= s.moveSpeed;
         attackCooldown /= s.attackSpeed;
-        pounceCooldown /= s.attackSpeed;
         rushCooldown /= s.attackSpeed;
         float telegraph = Mathf.Lerp(1f, s.attackSpeed, 0.5f);
         attackWindup /= telegraph;
-        pounceWindup /= telegraph;
         rushWindup /= telegraph;
         rushRecovery /= telegraph;
         detectionRange *= s.aggression;
     }
 
+    // Called by the alarm system: hunt the Robot for a while
+    public void Alert()
+    {
+        if (health == null || health.IsDead) return;
+        alertedUntil = Time.time + alertDuration;
+        if (!noticedPlayer) StartCoroutine(Notice());
+    }
+
     void FixedUpdate()
     {
         if (health.IsDead) return;
-        if (transform.position.y < -8f) { Destroy(gameObject); return; } // fell out of the room
-        if (attacking) return;            // the attack coroutine moves the bug
+        if (transform.position.y < -8f) { Destroy(gameObject); return; } // fell out of the section
+        if (attacking) return;            // the attack coroutine moves the Guard
         if (health.IsStunned) return;     // let the knockback play out
 
+        float belt = IsGrounded() ? ConveyorBelt.SpeedUnder((Vector2)transform.position, groundLayer) : 0f;
         float velocityX;
+
         if (CanSeePlayer())
         {
+            if (!noticedPlayer)
+            {
+                StartCoroutine(Notice());
+                return;
+            }
             // --- Chase ---
             float dx = player.position.x - transform.position.x;
             float distance = Mathf.Abs(dx);
@@ -163,121 +178,117 @@ public class VirusBugAI : MonoBehaviour
         }
         else
         {
+            noticedPlayer = false;
             // --- Patrol ---
-            if (transform.position.x >= rightX) Face(-1);
-            else if (transform.position.x <= leftX) Face(1);
-            if (!PathIsClear()) Face(-moveDirection);
-            velocityX = moveDirection * patrolSpeed;
+            if (Time.time < pausedUntil)
+            {
+                velocityX = 0f;
+            }
+            else
+            {
+                bool atEnd = (moveDirection > 0 && transform.position.x >= rightX) || (moveDirection < 0 && transform.position.x <= leftX);
+                if (atEnd || !PathIsClear())
+                {
+                    StartCoroutine(LookAroundAndTurn());
+                    velocityX = 0f;
+                }
+                else velocityX = moveDirection * patrolSpeed;
+            }
         }
 
-        rb.linearVelocity = new Vector2(velocityX, rb.linearVelocity.y);
+        rb.linearVelocity = new Vector2(velocityX + belt, rb.linearVelocity.y);
         SetAnimSpeed(Mathf.Abs(velocityX));
+        // A little bob while walking: heavy mechanical steps
+        if (Mathf.Abs(velocityX) > 0.1f && !attacking)
+        {
+            float step = Mathf.Abs(Mathf.Sin(Time.time * 9f));
+            SetScale(1f + step * 0.03f, 1f - step * 0.04f);
+        }
+    }
+
+    // At an edge or the end of the route: stop, glance back, then turn around
+    IEnumerator LookAroundAndTurn()
+    {
+        pausedUntil = Time.time + turnPause + 0.05f;
+        SetScale(1f, 1f);
+        yield return new WaitForSeconds(turnPause * 0.5f);
+        if (health.IsDead || noticedPlayer) yield break;
+        Face(-moveDirection);
+    }
+
+    // The Robot is spotted: freeze, flash, "!"
+    IEnumerator Notice()
+    {
+        noticedPlayer = true;
+        attacking = true;
+        StopX();
+        SetAnimSpeed(0f);
+        if (player != null) Face(player.position.x > transform.position.x ? 1 : -1);
+        if (noticeSound != null) noticeSound.Play();
+        DamageNumber.Show(BodyCenter + Vector2.up * 1.3f, "!", new Color(1f, 0.85f, 0.3f), 1.4f, 0.6f);
+        float timer = 0f;
+        while (timer < noticeTime && !health.IsDead)
+        {
+            timer += Time.deltaTime;
+            SetScale(1f - 0.06f * Mathf.Sin(timer / noticeTime * Mathf.PI), 1f + 0.08f * Mathf.Sin(timer / noticeTime * Mathf.PI));
+            yield return null;
+        }
+        SetScale(1f, 1f);
+        nextAttackTime = Mathf.Max(nextAttackTime, Time.time + 0.2f);
+        attacking = false;
     }
 
     Pattern ChoosePattern(float distance)
     {
         if (Time.time < nextAttackTime || !IsGrounded()) return Pattern.None;
-        if (distance <= attackRange) return Pattern.Bite;
+        if (distance <= attackRange) return Pattern.Strike;
 
-        bool canPounce = Time.time >= nextPounceTime && distance >= pounceRange.x && distance <= pounceRange.y;
         bool canRush = Time.time >= nextRushTime && distance >= rushRange.x && distance <= rushRange.y
                        && Mathf.Abs(player.position.y - transform.position.y) < 1f && PathIsClear();
-
-        // Prefer the attack we didn't use last time
-        if (canPounce && canRush) return lastSpecial == Pattern.Pounce ? Pattern.Rush : Pattern.Pounce;
-        if (canPounce) return Pattern.Pounce;
-        if (canRush) return Pattern.Rush;
-        return Pattern.None;
+        return canRush ? Pattern.Rush : Pattern.None;
     }
 
     IEnumerator RunPattern(Pattern pattern)
     {
         attacking = true;
         SetAnimSpeed(0f);
-        if (pattern != Pattern.Bite) lastSpecial = pattern;
 
         switch (pattern)
         {
-            case Pattern.Bite: yield return Bite(); break;
-            case Pattern.Pounce: yield return Pounce(); break;
+            case Pattern.Strike: yield return Strike(); break;
             case Pattern.Rush: yield return Rush(); break;
         }
 
-        transform.localScale = new Vector3(Mathf.Sign(transform.localScale.x) * baseScale.x, baseScale.y, baseScale.z);
+        SetScale(1f, 1f);
         if (!health.IsDead && spriteRenderer != null) spriteRenderer.color = Color.white;
         attacking = false;
     }
 
-    // ---------------- BITE ----------------
-    IEnumerator Bite()
+    // ---------------- STRIKE ----------------
+    IEnumerator Strike()
     {
         nextAttackTime = Time.time + attackCooldown;
         if (animator != null) animator.SetTrigger("Attack");
-        yield return Telegraph(attackWindup, biteColor, 0.9f, 1.1f);
+        // Lean back, baton raised
+        yield return Telegraph(attackWindup, strikeColor, 0.92f, 1.08f);
         if (health.IsDead || health.IsStunned) yield break;
 
         // Only hurt the player if they are still in reach after the wind-up
         if (player != null && !playerHealth.IsDead)
         {
             Vector2 offset = player.position - transform.position;
-            if (Mathf.Abs(offset.x) <= attackRange + 0.3f && Mathf.Abs(offset.y) <= 1.5f)
+            if (Mathf.Abs(offset.x) <= attackRange + 0.3f && Mathf.Abs(offset.y) <= 1.5f && Mathf.Sign(offset.x) == moveDirection)
             {
                 playerHealth.TakeDamage(damage, transform.position, health.DamageMultiplier);
-                if (attackSound != null) attackSound.Play();
             }
         }
-        // small lunge so the bite reads clearly
-        rb.linearVelocity = new Vector2(moveDirection * 3f, rb.linearVelocity.y);
+        if (attackSound != null) attackSound.Play();
+        Fx.Sparks(BodyCenter + new Vector2(moveDirection * 0.9f, 0f), strikeColor, 5, 3f);
+        // Lean into the strike so it reads clearly
+        SetScale(1.12f, 0.92f);
+        rb.linearVelocity = new Vector2(moveDirection * 2.5f, rb.linearVelocity.y);
         yield return new WaitForSeconds(0.2f);
         StopX();
-    }
-
-    // ---------------- POUNCE ----------------
-    IEnumerator Pounce()
-    {
-        nextPounceTime = Time.time + pounceCooldown;
-        nextAttackTime = Time.time + attackCooldown;
-        if (animator != null) animator.SetTrigger("Attack");
-
-        // Crouch: squash down and flash orange
-        yield return Telegraph(pounceWindup, pounceColor, 1.15f, 0.75f);
-        if (health.IsDead || health.IsStunned || player == null) yield break;
-
-        // Jump in an arc that lands roughly where the player is now
-        float dx = player.position.x - transform.position.x;
-        Face(dx > 0f ? 1 : -1);
-        float gravity = Mathf.Abs(Physics2D.gravity.y * rb.gravityScale);
-        float airTime = 2f * pounceJumpSpeed / gravity;
-        float speedX = Mathf.Clamp(dx / airTime, -9f, 9f);
-        rb.linearVelocity = new Vector2(speedX, pounceJumpSpeed);
-        if (attackSound != null) attackSound.Play();
-        Fx.Sparks(transform.position, pounceColor, 6, 3f);
-
-        // Stretch while in the air, hurt on contact
-        bool hit = false;
-        float timer = 0f;
-        yield return new WaitForFixedUpdate();
-        while (timer < airTime + 0.5f && !health.IsDead && !health.IsStunned)
-        {
-            SetScale(0.85f, 1.2f);
-            if (!hit && TouchingPlayer(1f))
-            {
-                playerHealth.TakeDamage(damage, transform.position, health.DamageMultiplier);
-                hit = true;
-            }
-            if (timer > 0.15f && IsGrounded()) break;
-            timer += Time.fixedDeltaTime;
-            yield return new WaitForFixedUpdate();
-        }
-
-        // Landing: squash + dust
-        if (!health.IsDead && !health.IsStunned)
-        {
-            StopX();
-            Fx.Sparks(transform.position, new Color(0.6f, 0.6f, 0.7f), 8, 3f);
-            SetScale(1.25f, 0.75f);
-            yield return new WaitForSeconds(0.35f);
-        }
     }
 
     // ---------------- RUSH ----------------
@@ -309,7 +320,7 @@ public class VirusBugAI : MonoBehaviour
         while (timer < rushDuration && !health.IsDead && !health.IsStunned && PathIsClear())
         {
             rb.linearVelocity = new Vector2(moveDirection * rushSpeed, rb.linearVelocity.y);
-            SetScale(1.2f, 0.85f);
+            SetScale(1.15f, 0.88f);
             if (!hit && TouchingPlayer(1.1f))
             {
                 playerHealth.TakeDamage(damage, transform.position, health.DamageMultiplier);
@@ -320,7 +331,7 @@ public class VirusBugAI : MonoBehaviour
             {
                 trailTimer = 0.05f;
                 Fx.Spawn(Fx.Pixel, (Vector2)transform.position + Vector2.up * 0.1f, new Vector2(-moveDirection * 2f, 1.5f), 0.3f, 1.2f, 0.2f,
-                    new Color(0.6f, 0.6f, 0.7f, 0.8f), Color.clear, 4f);
+                    new Color(0.6f, 0.6f, 0.65f, 0.8f), Color.clear, 4f);
             }
             timer += Time.fixedDeltaTime;
             yield return new WaitForFixedUpdate();
@@ -331,11 +342,17 @@ public class VirusBugAI : MonoBehaviour
         StopX();
         if (spriteRenderer != null) spriteRenderer.color = Color.white;
         float dizzy = 0f;
+        float nextSpark = 0f;
         while (dizzy < rushRecovery && !health.IsDead)
         {
             dizzy += Time.deltaTime;
             float wobble = Mathf.Sin(dizzy * 25f) * 0.08f;
             SetScale(1f + wobble, 1f - wobble);
+            if (dizzy >= nextSpark)
+            {
+                nextSpark = dizzy + 0.2f;
+                Fx.Sparks(BodyCenter + Vector2.up * 0.7f, new Color(0.5f, 0.8f, 1f), 2, 2f);
+            }
             yield return null;
         }
     }
@@ -366,7 +383,9 @@ public class VirusBugAI : MonoBehaviour
     {
         if (player == null || playerHealth == null || playerHealth.IsDead) return false;
         Vector2 offset = player.position - transform.position;
-        return Mathf.Abs(offset.x) <= detectionRange && Mathf.Abs(offset.y) <= maxHeightDifference;
+        // Alerted Guards track the Robot along their floor from much further away
+        float range = IsAlerted ? detectionRange * 3f : detectionRange;
+        return Mathf.Abs(offset.x) <= range && Mathf.Abs(offset.y) <= maxHeightDifference;
     }
 
     bool IsGrounded()
@@ -416,7 +435,5 @@ public class VirusBugAI : MonoBehaviour
         Gizmos.DrawWireSphere(transform.position, detectionRange);
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
-        Gizmos.color = new Color(1f, 0.6f, 0.2f);
-        Gizmos.DrawWireSphere(transform.position, pounceRange.y);
     }
 }

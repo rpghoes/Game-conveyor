@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
-// Health for every enemy (Virus Bug, Scanner Drone and the Boss).
+// Health for every enemy (Guard, Scanner and the bosses).
 // Handles damage, knockback, a short stun, hit flash and death.
 // On death the enemy blows up: its sprite shatters into pieces with sparks and a shockwave.
 // The boss goes through a chain of small explosions before the final blast.
@@ -72,8 +72,8 @@ public class EnemyHealth : MonoBehaviour
         if (explosionColor.a <= 0f)
         {
             if (isBoss) explosionColor = new Color(1f, 0.3f, 0.6f);
-            else if (GetComponent<ScannerDroneAI>() != null) explosionColor = new Color(1f, 0.4f, 0.25f);
-            else explosionColor = new Color(0.8f, 0.35f, 1f);
+            else if (GetComponent<ScannerAI>() != null) explosionColor = new Color(1f, 0.4f, 0.25f);
+            else explosionColor = new Color(1f, 0.7f, 0.3f);
         }
         if (explosionSize <= 0f) explosionSize = isBoss ? 2.5f : 1f;
     }

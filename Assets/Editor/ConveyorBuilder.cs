@@ -99,7 +99,7 @@ public static class ConveyorBuilder
     // =====================================================================
 
     static readonly Vector2 RobotPivot = new Vector2(0.5f, 4f / 64f);   // feet of the robot
-    static readonly Vector2 BugPivot = new Vector2(0.5f, 7f / 64f);     // feet of the virus bug
+    static readonly Vector2 TopCenter = new Vector2(0.5f, 1f);
     static readonly Vector2 Center = new Vector2(0.5f, 0.5f);
     static readonly Vector2 Bottom = new Vector2(0.5f, 0f);
     static readonly Vector2 SentinelPivot = new Vector2(0.5f, 2f / 112f);   // feet of the Core Sentinel (128x112 frames)
@@ -118,7 +118,6 @@ public static class ConveyorBuilder
         ConfigureSprite(ArtRobot + "Robot_Attack.png", RobotPivot, 8);
         ConfigureSprite(ArtRobot + "Robot_Run.png", RobotPivot, 8);
         ConfigureSprite(ArtRobot + "Robot_Death.png", RobotPivot, 8);
-        ConfigureSprite("Assets/Art/VirusBug/VirusBug.png", BugPivot, 1);
         ConfigureSprite("Assets/Art/ScannerDrone/ScannerDrone.png", Center, 1);
 
         foreach (string tile in new[] { "Tile_GroundSurface", "Tile_GroundFill", "Tile_Platform", "Tile_Electric", "Tile_Corrupted", "Tile_Background", "Vent" })
@@ -135,6 +134,11 @@ public static class ConveyorBuilder
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.PressHead), Center, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.PressRod), Center, 1);
         ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.Furnace), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ShadowBlob), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.LampDot), Center, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.Guard), Bottom, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ScanCone), TopCenter, 1);
+        ConfigureSprite(PlaceholderArt.PathOf(PlaceholderArt.ServiceDoor), Bottom, 1);
     }
 
     static void ConfigureSprite(string path, Vector2 pivot, int frameCount)
@@ -313,7 +317,7 @@ public static class ConveyorBuilder
         AnyState(sm, sDouble).AddCondition(AnimatorConditionMode.If, 0, "DoubleJump");
 
         // ---------- Enemies (single provided image each; other states ready for future frames) ----------
-        MakeEnemyAnimations("VirusBug", LoadSprite("Assets/Art/VirusBug/VirusBug.png"), "Walk");
+        MakeEnemyAnimations("Guard", PlaceholderSprite(PlaceholderArt.Guard), "Walk");
         MakeEnemyAnimations("ScannerDrone", LoadSprite("Assets/Art/ScannerDrone/ScannerDrone.png"), "Fly");
 
         // ---------- Boss (placeholder art) ----------
@@ -454,8 +458,8 @@ public static class ConveyorBuilder
     // =====================================================================
 
     const string PlayerPrefabPath = "Assets/Prefabs/Player/Player.prefab";
-    const string BugPrefabPath = "Assets/Prefabs/Enemies/VirusBug.prefab";
-    const string DronePrefabPath = "Assets/Prefabs/Enemies/ScannerDrone.prefab";
+    const string GuardPrefabPath = "Assets/Prefabs/Enemies/Guard.prefab";
+    const string ScannerPrefabPath = "Assets/Prefabs/Enemies/Scanner.prefab";
     const string RelayPrefabPath = "Assets/Prefabs/Relays/PowerRelay.prefab";
     const string CheckpointPrefabPath = "Assets/Prefabs/Checkpoints/Checkpoint.prefab";
     const string ExitPrefabPath = "Assets/Prefabs/Checkpoints/LevelExit.prefab";
@@ -467,8 +471,8 @@ public static class ConveyorBuilder
     static void CreatePrefabs()
     {
         CreatePlayerPrefab();
-        CreateVirusBugPrefab();
-        CreateDronePrefab();
+        CreateGuardPrefab();
+        CreateScannerPrefab();
         CreateRelayPrefab();
         CreateCheckpointPrefab();
         CreateExitPrefab();
@@ -579,41 +583,56 @@ public static class ConveyorBuilder
         return enemy;
     }
 
-    static void CreateVirusBugPrefab()
+    // Guard (placeholder art faces RIGHT). 3 hits.
+    static void CreateGuardPrefab()
     {
-        GameObject bug = NewEnemyBase("VirusBug", LoadSprite("Assets/Art/VirusBug/VirusBug.png"), "Assets/Animations/VirusBug/VirusBug.controller", 3);
+        GameObject guard = NewEnemyBase("Guard", PlaceholderSprite(PlaceholderArt.Guard), "Assets/Animations/Guard/Guard.controller", 3);
 
-        var rb = bug.AddComponent<Rigidbody2D>();
+        var rb = guard.AddComponent<Rigidbody2D>();
         rb.gravityScale = 4f;
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-        var col = bug.AddComponent<BoxCollider2D>();
-        col.size = new Vector2(1.1f, 1.0f);
-        col.offset = new Vector2(0f, 0.5f);
+        var col = guard.AddComponent<BoxCollider2D>();
+        col.size = new Vector2(1f, 1.75f);
+        col.offset = new Vector2(0f, 0.875f);
 
-        var ai = bug.AddComponent<VirusBugAI>();
+        var ai = guard.AddComponent<GuardAI>();
         ai.groundLayer = 1 << GroundLayer;
-        ai.attackSound = AddSound(bug.transform.Find("Audio"), "SFX_Attack");
-        ai.pointA = NewChild(bug, "PatrolPointA", new Vector3(-3f, 0f, 0f));
-        ai.pointB = NewChild(bug, "PatrolPointB", new Vector3(3f, 0f, 0f));
+        ai.artFacesRight = true;
+        Transform audio = guard.transform.Find("Audio");
+        ai.attackSound = AddSound(audio, "SFX_Attack");
+        ai.noticeSound = AddSound(audio, "SFX_GuardNotice");
+        ai.pointA = NewChild(guard, "PatrolPointA", new Vector3(-3f, 0f, 0f));
+        ai.pointB = NewChild(guard, "PatrolPointB", new Vector3(3f, 0f, 0f));
 
-        SavePrefab(bug, BugPrefabPath);
+        SavePrefab(guard, GuardPrefabPath);
     }
 
-    static void CreateDronePrefab()
+    // Scanner: the drone art + a scanning beam child. One hit disables it.
+    static void CreateScannerPrefab()
     {
-        GameObject drone = NewEnemyBase("ScannerDrone", LoadSprite("Assets/Art/ScannerDrone/ScannerDrone.png"), "Assets/Animations/ScannerDrone/ScannerDrone.controller", 2);
+        GameObject scanner = NewEnemyBase("Scanner", LoadSprite("Assets/Art/ScannerDrone/ScannerDrone.png"), "Assets/Animations/ScannerDrone/ScannerDrone.controller", 1);
 
-        var rb = drone.AddComponent<Rigidbody2D>();
+        var rb = scanner.AddComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.linearDamping = 3f;
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-        var col = drone.AddComponent<CircleCollider2D>();
+        var col = scanner.AddComponent<CircleCollider2D>();
         col.radius = 0.5f;
 
-        var ai = drone.AddComponent<ScannerDroneAI>();
-        ai.attackSound = AddSound(drone.transform.Find("Audio"), "SFX_Attack");
+        var beam = new GameObject("ScanBeam");
+        beam.transform.SetParent(scanner.transform, false);
+        var beamRenderer = beam.AddComponent<SpriteRenderer>();
+        beamRenderer.sprite = PlaceholderSprite(PlaceholderArt.ScanCone);
+        beamRenderer.sortingOrder = SortEnemies - 1;
 
-        SavePrefab(drone, DronePrefabPath);
+        var ai = scanner.AddComponent<ScannerAI>();
+        ai.beam = beamRenderer;
+        ai.groundLayer = 1 << GroundLayer;
+        Transform audio = scanner.transform.Find("Audio");
+        ai.scanSound = AddSound(audio, "SFX_ScanBeep");
+        ai.alarmSound = AddSound(audio, "SFX_Alarm");
+
+        SavePrefab(scanner, ScannerPrefabPath);
     }
 
     static Transform NewChild(GameObject parent, string name, Vector3 localPosition)
@@ -983,7 +1002,7 @@ public static class ConveyorBuilder
         r = new Room("Section_02_Storage", 96, 22)
         {
             title = "SECTION 02 // STORAGE",
-            hint = "A SHADOW ON THE FLOOR MEANS A PRESS IS COMING DOWN",
+            hint = "A SHADOW ON THE FLOOR MEANS A PRESS IS COMING DOWN.  STAY OUT OF THE SCANNER BEAMS",
             next = "Section_03_Foreman", requiredRelays = 2,
             background = new Color(0.06f, 0.06f, 0.07f), tint = new Color(0.75f, 0.77f, 0.8f)
         };
@@ -993,7 +1012,7 @@ public static class ConveyorBuilder
          .Belt(52, 1, 16, -2.5f)                           // belt against the player
          .Platform(70, 5, 5).Platform(76, 8, 5).Solid(82, 11, 13, 1);   // climb to the loft
         r.Press(19, 3, 3f, 0f, 12).Press(25, 3, 3f, 1f, 12).Press(31, 3, 3f, 2f, 12);
-        r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 10).Add('B', 48, 2).Add('D', 60, 12).Add('B', 64, 2)
+        r.Add('P', 2, 2).Add('C', 37, 2).Add('D', 44, 10).Add('B', 48, 2).Add('D', 60, 12).Add('B', 64, 2).Add('G', 42, 2).Add('G', 80, 2)
          .Add('C', 71, 2).Relay(90, 12, 2).Add('D', 86, 17)
          .Add('r', 4, 2).Add('r', 39, 2).Add('v', 46, 16).Add('r', 84, 12).Add('E', 93, 2);
         rooms.Add(r);
@@ -1116,11 +1135,14 @@ public static class ConveyorBuilder
                     playerObject = Spawn(PlayerPrefabPath, feet, null);
                     break;
                 case 'B':
-                    GameObject bug = Spawn(BugPrefabPath, feet, enemies);
-                    SetupPatrol(room, bug, t.x, t.y);
+                    GameObject guard = Spawn(GuardPrefabPath, feet, enemies);
+                    SetupPatrol(room, guard, t.x, t.y);
                     break;
                 case 'D':
-                    Spawn(DronePrefabPath, new Vector3(t.x + 0.5f, t.y + 0.5f, 0f), enemies);
+                    Spawn(ScannerPrefabPath, new Vector3(t.x + 0.5f, t.y + 0.5f, 0f), enemies);
+                    break;
+                case 'G':
+                    NewServiceDoor(feet, interactables);
                     break;
                 case 'R':
                     GameObject relayObject = Spawn(RelayPrefabPath, feet, interactables);
@@ -1236,7 +1258,7 @@ public static class ConveyorBuilder
     }
 
     // Patrol points = how far the Guard can walk on its platform (max 5 tiles each way)
-    static void SetupPatrol(Room room, GameObject bug, int x, int y)
+    static void SetupPatrol(Room room, GameObject guard, int x, int y)
     {
         System.Func<int, bool> walkable = cx =>
         {
@@ -1248,7 +1270,7 @@ public static class ConveyorBuilder
         while (left - 1 >= 0 && x - (left - 1) <= 5 && walkable(left - 1)) left--;
         while (right + 1 < room.width && (right + 1) - x <= 5 && walkable(right + 1)) right++;
 
-        var ai = bug.GetComponent<VirusBugAI>();
+        var ai = guard.GetComponent<GuardAI>();
         ai.pointA.position = new Vector3(left + 0.6f, y, 0f);
         ai.pointB.position = new Vector3(right + 0.4f, y, 0f);
     }
@@ -1357,6 +1379,21 @@ public static class ConveyorBuilder
         var col = heat.AddComponent<BoxCollider2D>();
         col.isTrigger = true;
         col.size = new Vector2(t.width / go.transform.localScale.x, 2.5f / go.transform.localScale.y);
+    }
+
+    // Service door in the back wall: a Guard comes out of it when an alarm is raised nearby
+    static void NewServiceDoor(Vector3 feet, Transform parent)
+    {
+        var go = new GameObject("ServiceDoor");
+        go.transform.SetParent(parent, false);
+        go.transform.position = feet;
+        var spawnPoint = go.AddComponent<GuardSpawnPoint>();
+        spawnPoint.guardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GuardPrefabPath);
+        spawnPoint.doorRenderer = NewChildSprite(go, "Door", PlaceholderSprite(PlaceholderArt.ServiceDoor), SortDecor + 2);
+        spawnPoint.lamp = NewChildSprite(go, "Lamp", PlaceholderSprite(PlaceholderArt.LampDot), SortDecor + 3);
+        spawnPoint.lamp.transform.localPosition = new Vector3(0f, 1.9f, 0f);
+        spawnPoint.openSound = AddSound(AddAudioRoot(go), "SFX_BeltReverse");
+        MakeSpatial(spawnPoint.openSound, 0.7f);
     }
 
     // A dark, switched-off robot lying on the transport line (same model as Unit 0412)

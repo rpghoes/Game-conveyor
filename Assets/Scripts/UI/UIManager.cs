@@ -231,6 +231,22 @@ public class UIManager : MonoBehaviour
         flashImage.gameObject.SetActive(false);
     }
 
+    // Security alarm (a Scanner found the Robot): three red pulses and a warning line
+    public void ShowAlarm(string text)
+    {
+        ShowMessage(text, 3f);
+        StartCoroutine(AlarmPulses());
+    }
+
+    IEnumerator AlarmPulses()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            Flash(new Color(1f, 0.1f, 0.05f, 0.22f), 0.45f);
+            yield return new WaitForSeconds(0.55f);
+        }
+    }
+
     // ---------------- Factory log (relay terminals) ----------------
 
     // A terminal window on the right side of the screen. Lines are typed out one by one,

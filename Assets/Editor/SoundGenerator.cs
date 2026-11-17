@@ -35,15 +35,14 @@ public static class SoundGenerator
     {
         { "Player/SFX_Attack", "SFX_PlayerSlash" },
         { "Player/SFX_Death", "SFX_PlayerDeath" },
-        { "VirusBug/SFX_Attack", "SFX_BugAttack" },
-        { "ScannerDrone/SFX_Attack", "SFX_DroneShot" },
+        { "Guard/SFX_Attack", "SFX_GuardStrike" },
     };
 
     static readonly string[] Prefabs =
     {
         "Assets/Prefabs/Player/Player.prefab",
-        "Assets/Prefabs/Enemies/VirusBug.prefab",
-        "Assets/Prefabs/Enemies/ScannerDrone.prefab",
+        "Assets/Prefabs/Enemies/Guard.prefab",
+        "Assets/Prefabs/Enemies/Scanner.prefab",
         "Assets/Prefabs/Boss/Boss.prefab",
         "Assets/Prefabs/Boss/Boss_Sentinel.prefab",
         "Assets/Prefabs/Relays/PowerRelay.prefab",
@@ -167,6 +166,10 @@ public static class SoundGenerator
             { "SFX_PressImpact", PressImpact },
             { "SFX_BeltHum", BeltHum },
             { "SFX_BeltReverse", BeltReverse },
+            { "SFX_Alarm", Alarm },
+            { "SFX_ScanBeep", ScanBeep },
+            { "SFX_GuardStrike", GuardStrike },
+            { "SFX_GuardNotice", GuardNotice },
         };
         var music = new Dictionary<string, System.Func<float[]>>
         {
@@ -444,6 +447,47 @@ public static class SoundGenerator
         Tone(b, 0f, 0.35f, 300f, 90f, Wave.Saw, 0.25f, decay: 1f);
         Tone(b, 0.35f, 0.4f, 90f, 300f, Wave.Saw, 0.25f, attack: 0.05f, decay: 1.2f);
         Crush(b, 12);
+        return b;
+    }
+
+    // Security alarm: a two-tone factory siren, three cycles
+    static float[] Alarm()
+    {
+        var b = Buffer(1.8f);
+        for (int k = 0; k < 3; k++)
+        {
+            Tone(b, k * 0.6f, 0.3f, 620f, 620f, Wave.Square, 0.3f, decay: 0.3f, duty: 0.4f);
+            Tone(b, k * 0.6f + 0.3f, 0.3f, 465f, 465f, Wave.Square, 0.3f, decay: 0.3f, duty: 0.4f);
+        }
+        LowPass(b, 0.5f);
+        return b;
+    }
+
+    // Scanner locks on: rising chirps
+    static float[] ScanBeep()
+    {
+        var b = Buffer(0.45f);
+        for (int k = 0; k < 3; k++) Tone(b, k * 0.12f, 0.08f, 1300f + k * 250f, 1500f + k * 250f, Wave.Sine, 0.35f, decay: 1f);
+        return b;
+    }
+
+    // Guard baton: metallic clang
+    static float[] GuardStrike()
+    {
+        var b = Buffer(0.35f);
+        Noise(b, 0f, 0.08f, 0.7f, 0.8f, 0.3f, decay: 2f);
+        Tone(b, 0f, 0.3f, 720f, 700f, Wave.Triangle, 0.3f, decay: 2.5f);
+        Tone(b, 0f, 0.3f, 1110f, 1090f, Wave.Triangle, 0.15f, decay: 3f);
+        Tone(b, 0f, 0.12f, 180f, 90f, Wave.Square, 0.3f, decay: 2f);
+        return b;
+    }
+
+    // Guard notices the Robot: short servo whirr + beep
+    static float[] GuardNotice()
+    {
+        var b = Buffer(0.35f);
+        Tone(b, 0f, 0.15f, 200f, 420f, Wave.Saw, 0.2f, decay: 0.8f);
+        Tone(b, 0.15f, 0.15f, 980f, 980f, Wave.Square, 0.2f, decay: 1.2f, duty: 0.25f);
         return b;
     }
 

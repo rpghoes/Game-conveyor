@@ -18,6 +18,9 @@ public static class PlaceholderArt
     public const string Furnace = "Furnace";              // 128x128
     public const string ShadowBlob = "Shadow_Blob";       // 64x16 soft black ellipse (press warning shadow)
     public const string LampDot = "Lamp_Dot";            // 8x8 white dot (warning lamps), tinted in code
+    public const string Guard = "Guard";                  // 48x64 factory security robot, faces RIGHT, feet at the bottom
+    public const string ScanCone = "Scan_Cone";           // 32x64 white cone, apex at the top centre (scanner beam)
+    public const string ServiceDoor = "Service_Door";     // 32x64 door in the wall (guard spawn point)
 
     // Palette: old factory metal, rust, hazard yellow
     static readonly Color Steel = Hex("4a4f57");
@@ -43,6 +46,9 @@ public static class PlaceholderArt
         wrote |= Ensure(Furnace, 128, 128, DrawFurnace);
         wrote |= Ensure(ShadowBlob, 64, 16, DrawShadow);
         wrote |= Ensure(LampDot, 8, 8, c => c.Circle(4, 4, 3, Color.white));
+        wrote |= Ensure(Guard, 48, 64, DrawGuard);
+        wrote |= Ensure(ScanCone, 32, 64, DrawScanCone);
+        wrote |= Ensure(ServiceDoor, 32, 64, DrawServiceDoor);
         if (wrote) AssetDatabase.Refresh();
         return wrote;
     }
@@ -129,6 +135,69 @@ public static class PlaceholderArt
         }
         c.Rect(16, 100, 96, 6, SteelDark);
         c.Rect(16, 106, 96, 2, Rust);
+    }
+
+    // Guard: boxy security robot (head with a red visor, striped torso, short legs, baton in the front hand)
+    static void DrawGuard(Canvas c)
+    {
+        Color outline = Hex("15161a");
+        // legs
+        c.Rect(14, 0, 8, 4, outline); c.Rect(27, 0, 8, 4, outline);
+        c.Rect(15, 2, 6, 14, Steel); c.Rect(28, 2, 6, 14, Steel);
+        c.Rect(15, 2, 6, 2, SteelDark); c.Rect(28, 2, 6, 2, SteelDark);
+        // torso
+        c.Rect(10, 15, 28, 26, outline);
+        c.Rect(11, 16, 26, 24, Steel);
+        c.Rect(11, 36, 26, 4, SteelLight);
+        for (int x = 11; x < 37; x++)
+            for (int y = 18; y < 24; y++)
+                if (((x + y) / 3) % 2 == 0) c.Set(x, y, Hazard);
+        c.Rect(20, 27, 8, 6, SteelDark); c.Rect(22, 29, 4, 2, Hex("ff5030"));
+        // head with a visor (faces right)
+        c.Rect(14, 41, 20, 16, outline);
+        c.Rect(15, 42, 18, 14, SteelLight);
+        c.Rect(22, 47, 12, 5, outline);
+        c.Rect(23, 48, 10, 3, Hex("ff3a2a"));
+        c.Rect(18, 57, 2, 4, SteelDark); c.Circle(19, 61, 1, Hex("ff3a2a"));
+        // back arm
+        c.Rect(7, 22, 5, 14, SteelDark);
+        // front arm + baton
+        c.Rect(36, 24, 5, 12, Steel);
+        c.Rect(39, 20, 4, 4, SteelDark);
+        c.Rect(40, 24, 3, 18, Hex("2b2b2b"));
+        c.Rect(40, 40, 3, 3, Hex("9fd8ff"));
+    }
+
+    // Scanner beam: a cone that is brightest near the lens and fades out at the far end
+    static void DrawScanCone(Canvas c)
+    {
+        for (int y = 0; y < 64; y++)
+        {
+            float fromTop = (63 - y) / 63f;             // 0 at the apex, 1 at the far end
+            float half = 1f + fromTop * 15f;
+            for (int x = 0; x < 32; x++)
+            {
+                float d = Mathf.Abs(x + 0.5f - 16f);
+                if (d > half) continue;
+                float edge = d > half - 1.5f ? 1f : 0.55f;          // brighter edges
+                float a = edge * Mathf.Lerp(1f, 0.25f, fromTop);
+                if (y % 4 == 0) a *= 0.7f;                          // scan lines
+                c.Set(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+    }
+
+    // Service door: steel frame, two panels, a lamp slot on top (the lamp itself is a separate sprite)
+    static void DrawServiceDoor(Canvas c)
+    {
+        c.Rect(0, 0, 32, 64, SteelDark);
+        c.Rect(3, 0, 26, 58, Steel);
+        c.Rect(15, 0, 2, 58, SteelDark);
+        for (int y = 6; y < 54; y += 12) { c.Rect(5, y, 8, 2, SteelLight); c.Rect(19, y, 8, 2, SteelLight); }
+        for (int x = 3; x < 29; x++)
+            for (int y = 0; y < 5; y++)
+                if (((x + y) / 3) % 2 == 0) c.Set(x, y, Hazard);
+        c.Rect(12, 59, 8, 4, Hex("15161a"));
     }
 
     // Soft ellipse: opaque in the middle, fading to the edge
